@@ -138,6 +138,7 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
+import * as FolderService from "./folder/FolderService.ts";
 import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
@@ -611,6 +612,7 @@ const makeWsRpcLayer = (
         return true;
       });
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
+      const folderService = yield* FolderService.FolderService;
       const worktreeSetupTracker = yield* WorktreeSetupTracker.WorktreeSetupTracker;
       const projectCloneTracker = yield* ProjectCloneTracker.ProjectCloneTracker;
       const repositoryIdentityResolver =
@@ -3014,6 +3016,56 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "source-control",
             },
           ),
+        [WS_METHODS.foldersList]: () =>
+          observeRpcEffect(WS_METHODS.foldersList, folderService.list(), {
+            "rpc.aggregate": "folder",
+          }),
+        [WS_METHODS.foldersCreate]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersCreate,
+            folderService.create(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersAddMember]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersAddMember,
+            folderService.addMember(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersArchiveMember]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersArchiveMember,
+            folderService.archiveMember(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersRestoreMember]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersRestoreMember,
+            folderService.restoreMember(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersArchive]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersArchive,
+            folderService.archive(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersRestore]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersRestore,
+            folderService.restore(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersSetIssueStatus]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersSetIssueStatus,
+            folderService.setIssueStatus(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersWriteHandoff]: (input) =>
+          observeRpcEffect(WS_METHODS.foldersWriteHandoff, folderService.writeHandoff(input), {
+            "rpc.aggregate": "folder",
+          }),
         [WS_METHODS.projectsSearchEntries]: (input) =>
           observeRpcEffect(
             WS_METHODS.projectsSearchEntries,

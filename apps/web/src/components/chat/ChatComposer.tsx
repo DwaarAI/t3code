@@ -184,6 +184,7 @@ import {
   type TerminalContextSelection,
 } from "../../lib/terminalContext";
 import { useComposerPathSearch } from "../../lib/composerPathSearchState";
+import { useFolderMemberForWorktree, useFoldersForEnvironment } from "../../state/folders";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import {
   getRestingComposerImagePreviewCounts,
@@ -2259,11 +2260,23 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const settledPullRequestTextQuery =
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
-  const workspaceEntries = useComposerPathSearch({
-    environmentId,
-    cwd: isPathTrigger ? gitCwd : null,
-    query: isPathTrigger ? pathTriggerQuery : null,
-  });
+  const folderMatch = useFolderMemberForWorktree(environmentId, gitCwd);
+  const environmentFolders = useFoldersForEnvironment(environmentId);
+  const composerExtraRoots = useMemo(
+    () => ({
+      context: folderMatch ? { cwd: folderMatch.folder.contextDir, label: ".context" } : null,
+      guides: environmentFolders ? { cwd: environmentFolders.guidesDir, label: "guides" } : null,
+    }),
+    [environmentFolders, folderMatch],
+  );
+  const workspaceEntries = useComposerPathSearch(
+    {
+      environmentId,
+      cwd: isPathTrigger ? gitCwd : null,
+      query: isPathTrigger ? pathTriggerQuery : null,
+    },
+    composerExtraRoots,
+  );
   const compactSlashCommandAvailable =
     composerTrigger?.kind === "slash-command" &&
     prompt.slice(0, composerTrigger.rangeStart).trim() === "" &&
@@ -2346,7 +2359,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         path: entry.path,
         pathKind: entry.kind,
         label: basenameOfPath(entry.path),
-        description: entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
+        description:
+          entry.sourceLabel ?? entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
       }));
     }
     if (composerTrigger.kind === "slash-command") {

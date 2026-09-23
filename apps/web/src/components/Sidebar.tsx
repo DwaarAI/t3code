@@ -80,6 +80,9 @@ import {
 import { useParams, useRouter } from "@tanstack/react-router";
 
 import { useRightPanelStore } from "../rightPanelStore";
+import { folderWorktreeKey, useFolderWorktreeKeys } from "../state/folders";
+import { useFolderHandoff } from "../hooks/useFolderHandoff";
+import { SidebarFolders } from "./folders/SidebarFolders";
 import {
   isAtomCommandInterrupted,
   settlePromise,
@@ -2151,6 +2154,9 @@ export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
+  // Folder threads live under their folder, not in the flat list.
+  const folderWorktreeKeys = useFolderWorktreeKeys();
+  const handOff = useFolderHandoff();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -2547,6 +2553,8 @@ export default function Sidebar() {
     const visible = threads.filter(
       (thread) =>
         thread.archivedAt === null &&
+        (thread.worktreePath === null ||
+          !folderWorktreeKeys.has(folderWorktreeKey(thread.environmentId, thread.worktreePath))) &&
         (scopedProjectKeys === null ||
           scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
     );
@@ -2634,7 +2642,15 @@ export default function Sidebar() {
       settledThreads: sortSettledThreadsForSidebar(settled),
       snoozeNow: preciseNow,
     };
-  }, [nowMinute, optimisticDrop, scopedProjectKeys, serverConfigs, snoozeWakeTick, threads]);
+  }, [
+    folderWorktreeKeys,
+    nowMinute,
+    optimisticDrop,
+    scopedProjectKeys,
+    serverConfigs,
+    snoozeWakeTick,
+    threads,
+  ]);
 
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
@@ -2805,6 +2821,25 @@ export default function Sidebar() {
       ),
     [orderedThreads],
   );
+  const activeFolderWorktree = useMemo(() => {
+    if (routeDraftThread?.worktreePath) {
+      return {
+        environmentId: routeDraftThread.environmentId,
+        worktreePath: routeDraftThread.worktreePath,
+      };
+    }
+    // Folder threads are not in the flat list, so look in every thread.
+    const thread = routeThreadRef
+      ? threads.find(
+          (candidate) =>
+            candidate.environmentId === routeThreadRef.environmentId &&
+            candidate.id === routeThreadRef.threadId,
+        )
+      : undefined;
+    return thread?.worktreePath
+      ? { environmentId: thread.environmentId, worktreePath: thread.worktreePath }
+      : null;
+  }, [routeDraftThread, routeThreadRef, threads]);
   // Handlers read these through refs: depending on per-update Map/Set
   // identities would give every row a fresh callback prop on each shell
   // event and defeat row memoization during streaming.
@@ -4056,6 +4091,11 @@ export default function Sidebar() {
           api.contextMenu.show(
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
+              canHandoff:
+                thread.worktreePath !== null &&
+                folderWorktreeKeys.has(
+                  folderWorktreeKey(thread.environmentId, thread.worktreePath),
+                ),
               projectFilter: threadProjectGroup
                 ? {
                     label: threadProjectGroup.displayName,
@@ -4103,6 +4143,9 @@ export default function Sidebar() {
             return;
           case "project-settings":
             if (threadProjectGroup) openProjectSettings(threadProjectGroup);
+            return;
+          case "handoff":
+            await handOff(thread);
             return;
           case "new-thread-on-branch": {
             // Explicit branch carry-over: reuse the thread's worktree when it
@@ -4261,6 +4304,8 @@ export default function Sidebar() {
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
+      folderWorktreeKeys,
+      handOff,
       handleMultiSelectContextMenu,
       markThreadUnread,
       openProjectSettings,
@@ -4554,6 +4599,9 @@ export default function Sidebar() {
           </SidebarGroup>
         }
       >
+        {isSearchingThreads ? null : (
+          <SidebarFolders threads={threads} activeWorktree={activeFolderWorktree} />
+        )}
         <SidebarGroup className="ps-[calc(var(--sidebar-content-inset)+1px)] pe-[var(--sidebar-content-inset)] pb-1 pt-0 flex-1">
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (

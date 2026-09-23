@@ -44,6 +44,7 @@ import {
   ProviderAdapterValidationError,
 } from "../Errors.ts";
 import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
+import { resolveFolderSessionContext } from "../../folder/folderLayout.ts";
 import { type OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
 import {
   buildOpenCodePermissionRules,
@@ -3282,6 +3283,7 @@ export function makeOpenCodeAdapter(
                     // OpenCode appends this after its own agent/provider prompts.
                     system: buildRuntimeInstructions({
                       harness: "OpenCode",
+                      folder: resolveFolderSessionContext(context.session.cwd, serverConfig),
                       model: `${parsedModel.providerID}/${parsedModel.modelID}`,
                     }),
                     parts: [...(text ? [{ type: "text" as const, text }] : []), ...fileParts],

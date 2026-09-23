@@ -97,6 +97,8 @@ import { useAtomCommand } from "../state/use-atom-command";
 import { useAtomQueryRunner } from "../state/use-atom-query-runner";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useServerConfigs, useThreadShells, waitForProject } from "../state/entities";
+import { useEnvironmentFolders } from "../state/folders";
+import { openCreateFolderDialog } from "./folders/CreateFolderDialog";
 import { useThreadSearch } from "../state/queries";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
 import {
@@ -729,6 +731,7 @@ function OpenCommandPaletteDialog(props: {
         ? scopeThreadRef(activeThread.environmentId, activeThread.id)
         : null;
   const openPanelPullRequestUrl = useOpenPanelPullRequestUrl(referenceThreadRef);
+  const folderEnvironments = useEnvironmentFolders();
   const activeThreadServerConfig = useServerConfigs().get(
     activeThread?.environmentId ?? ("" as EnvironmentId),
   );
@@ -1773,6 +1776,19 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  if (folderEnvironments.length > 0) {
+    actionItems.push({
+      kind: "action",
+      value: "action:new-folder",
+      searchTerms: ["folder", "feature", "worktrees", "repositories", "group"],
+      title: "New folder",
+      icon: <FolderPlusIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        openCreateFolderDialog();
+      },
     });
   }
 

@@ -157,6 +157,7 @@ import * as NativeAppIconResolver from "./assets/NativeAppIconResolver.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
+import * as FolderService from "./folder/FolderService.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
@@ -535,6 +536,7 @@ const buildAppUnderTest = (options?: {
     projectSetupScriptRunner?: Partial<
       ProjectSetupScriptRunner.ProjectSetupScriptRunner["Service"]
     >;
+    folderService?: Partial<FolderService.FolderService["Service"]>;
     providerSessionDirectory?: Partial<
       ProviderSessionDirectory.ProviderSessionDirectory["Service"]
     >;
@@ -938,6 +940,9 @@ const buildAppUnderTest = (options?: {
         Layer.mergeAll(
           Layer.mock(TerminalManager.TerminalManager)({
             ...options?.layers?.terminalManager,
+          }),
+          Layer.mock(FolderService.FolderService)({
+            ...options?.layers?.folderService,
           }),
           WorktreeSetupTracker.layer,
           ProjectCloneTracker.layer.pipe(

@@ -680,6 +680,20 @@ export const SETTINGS_SEARCH_ITEMS = [
     scope: "environment-defaults",
   },
   {
+    id: "github-issue-folders",
+    title: "Create folders from GitHub issues",
+    to: "/settings/source-control",
+    searchTerms: ["folders issues label poll sub-issues phases automation"],
+    environmentOnly: true,
+  },
+  {
+    id: "github-issue-folder-label",
+    title: "GitHub issue label",
+    to: "/settings/source-control",
+    searchTerms: ["folders issues trigger label t3"],
+    environmentOnly: true,
+  },
+  {
     id: "source-control-writing-style",
     title: "Source control writing style",
     to: "/settings/source-control",

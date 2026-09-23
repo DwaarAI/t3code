@@ -8,6 +8,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
  */
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
+  | "handoff"
   | "filter-by-project"
   | "project-settings"
   | "pin"
@@ -38,6 +39,8 @@ export interface ThreadActionMenuState {
     /** True when the list is already scoped to this thread's project. */
     readonly isActive: boolean;
   } | null;
+  /** The thread runs in a folder worktree, so it can hand off to a new thread. */
+  readonly canHandoff?: boolean;
   readonly isPinned: boolean;
   readonly isSettled: boolean;
   readonly isSnoozed: boolean;
@@ -68,6 +71,15 @@ export function buildThreadActionMenuItems(
           {
             id: "new-thread-on-branch" as const,
             label: `New thread on ${state.branch}`,
+            icon: "message-square-plus",
+          },
+        ]
+      : []),
+    ...(state.canHandoff
+      ? [
+          {
+            id: "handoff" as const,
+            label: "Continue in new thread (handoff)",
             icon: "message-square-plus",
           },
         ]
