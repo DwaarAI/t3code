@@ -10,6 +10,7 @@ import {
   FolderHandoffResult,
   FolderMemberRefInput,
   FolderRefInput,
+  FolderDeleteResult,
   FolderResult,
   FolderSetIssueStatusInput,
   FoldersListInput,
@@ -306,6 +307,7 @@ export const WS_METHODS = {
   foldersRestore: "folders.restore",
   foldersWriteHandoff: "folders.writeHandoff",
   foldersSetIssueStatus: "folders.setIssueStatus",
+  foldersDelete: "folders.delete",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -1013,6 +1015,12 @@ const WsFoldersRestoreRpc = Rpc.make(WS_METHODS.foldersRestore, {
   error: FolderRpcError,
 });
 
+const WsFoldersDeleteRpc = Rpc.make(WS_METHODS.foldersDelete, {
+  payload: FolderRefInput,
+  success: FolderDeleteResult,
+  error: FolderRpcError,
+});
+
 const WsFoldersSetIssueStatusRpc = Rpc.make(WS_METHODS.foldersSetIssueStatus, {
   payload: FolderSetIssueStatusInput,
   success: FolderResult,
@@ -1547,6 +1555,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFoldersRestoreRpc,
   WsFoldersWriteHandoffRpc,
   WsFoldersSetIssueStatusRpc,
+  WsFoldersDeleteRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,

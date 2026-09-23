@@ -125,6 +125,9 @@ export const FolderRefInput = Schema.Struct({
 });
 export type FolderRefInput = typeof FolderRefInput.Type;
 
+export const FolderDeleteResult = Schema.Struct({ slug: FolderSlug });
+export type FolderDeleteResult = typeof FolderDeleteResult.Type;
+
 export const FolderSetIssueStatusInput = Schema.Struct({
   slug: FolderSlug,
   status: FolderIssueStatus,

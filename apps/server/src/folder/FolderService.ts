@@ -18,6 +18,7 @@ import {
   type FolderMember,
   type FolderMemberInput,
   type FolderMemberRefInput,
+  type FolderDeleteResult,
   type FolderRefInput,
   type FolderSetIssueStatusInput,
   type FoldersListResult,
@@ -72,6 +73,8 @@ export class FolderService extends Context.Service<
     readonly setIssueStatus: (
       input: FolderSetIssueStatusInput,
     ) => Effect.Effect<Folder, FolderError>;
+    /** Removes the worktrees and the folder directory, including `.context`. */
+    readonly delete: (input: FolderRefInput) => Effect.Effect<FolderDeleteResult, FolderError>;
     readonly writeHandoff: (
       input: FolderHandoffInput,
     ) => Effect.Effect<FolderHandoffResult, FolderError>;
@@ -213,7 +216,6 @@ export const make = Effect.gen(function* () {
 
   const removeMemberWorktree = (member: FolderMember, force: boolean) =>
     Effect.gen(function* () {
-      const projectRoot = yield* resolveProjectRoot(member.projectId);
       if (!force) {
         // Asked explicitly: git's own refusal reaches us without its reason.
         // A worktree that is already gone has nothing to lose.
@@ -227,6 +229,24 @@ export const make = Effect.gen(function* () {
             `${member.repoName} has uncommitted changes. Commit them, or archive with force to discard them.`,
           );
         }
+      }
+      // A project removed from T3 Code leaves its folders behind. Without the
+      // repository git cannot retire the worktree, so drop the directory and
+      // leave the stale record for `git worktree prune`; otherwise the folder
+      // could never be archived or deleted.
+      const projectRoot = yield* resolveProjectRoot(member.projectId).pipe(
+        Effect.map((root): string | null => root),
+        Effect.catchIf(
+          (error) => error.reason === "project_not_found",
+          () => Effect.succeed(null),
+        ),
+      );
+      if (projectRoot === null) {
+        yield* Effect.logInfo(
+          `Project ${member.projectId} is gone; removing ${member.worktreePath} directly.`,
+        );
+        yield* fs.remove(member.worktreePath, { recursive: true }).pipe(Effect.ignore);
+        return;
       }
       yield* gitWorkflow
         .removeWorktree({ cwd: projectRoot, path: member.worktreePath, force })
@@ -283,8 +303,21 @@ export const make = Effect.gen(function* () {
   const restoreArchivedMember = (member: FolderMember) =>
     Effect.gen(function* () {
       if (member.archivedAt === null) return member;
+      // A member whose project is gone stays archived rather than failing the
+      // whole folder; adding the project back makes it restorable again.
+      const projectRoot = yield* resolveProjectRoot(member.projectId).pipe(
+        Effect.map((root): string | null => root),
+        Effect.catchIf(
+          (error) => error.reason === "project_not_found",
+          () =>
+            Effect.logWarning(
+              `Cannot restore ${member.repoName}: project ${member.projectId} is gone.`,
+            ).pipe(Effect.as(null)),
+        ),
+      );
+      if (projectRoot === null) return member;
       yield* checkOutWorktree({
-        projectRoot: yield* resolveProjectRoot(member.projectId),
+        projectRoot,
         branch: member.branch,
         baseBranch: member.baseBranch,
         worktreePath: member.worktreePath,
@@ -524,6 +557,23 @@ export const make = Effect.gen(function* () {
       }),
     );
 
+  const deleteFolder: FolderService["Service"]["delete"] = (input) =>
+    mutation.withPermits(1)(
+      Effect.gen(function* () {
+        const manifest = yield* readManifest(input.slug);
+        for (const member of manifest.members) {
+          if (member.archivedAt !== null) continue;
+          yield* removeMemberWorktree(member, input.force === true);
+          yield* settleMemberThreads(member);
+        }
+        // The manifest goes with the directory, so `.context` notes go too.
+        yield* fs
+          .remove(folderDirFor(manifest.slug), { recursive: true })
+          .pipe(Effect.mapError(ioFailed(`Could not delete ${folderDirFor(manifest.slug)}.`)));
+        return { slug: manifest.slug };
+      }),
+    );
+
   const writeHandoff: FolderService["Service"]["writeHandoff"] = (input) =>
     Effect.gen(function* () {
       const thread = yield* snapshotQuery
@@ -573,6 +623,7 @@ export const make = Effect.gen(function* () {
     archive,
     restore,
     setIssueStatus,
+    delete: deleteFolder,
     writeHandoff,
   });
 });

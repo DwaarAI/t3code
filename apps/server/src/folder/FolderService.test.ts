@@ -52,10 +52,11 @@ const makeHarness = (): Harness => ({
   threads: [],
 });
 
-const projectRoots: Record<string, string> = {
-  [API]: "/repos/api",
-  [WEB]: "/repos/web",
-  [BROKEN]: "/repos/broken",
+/** Reset per scenario: a test may remove a project mid-way. */
+let projectRoots: Record<string, string> = {};
+
+const resetProjectRoots = () => {
+  projectRoots = { [API]: "/repos/api", [WEB]: "/repos/web", [BROKEN]: "/repos/broken" };
 };
 
 const gitError = (detail: string) =>
@@ -179,6 +180,7 @@ const scenario = <A, E>(
   ) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
 ) => {
   const harness = makeHarness();
+  resetProjectRoots();
   return Effect.gen(function* () {
     const service = yield* FolderService.FolderService;
     return yield* body(service, harness);
@@ -397,6 +399,56 @@ describe("FolderService", () => {
         expect(reviewed.issue?.status).toBe("in-review");
         const listed = yield* service.list();
         expect(listed.folders[0]?.issue?.status).toBe("in-review");
+      }),
+    ),
+  );
+  it.effect("archives and deletes a folder whose project was removed", () =>
+    scenario((service, harness) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const folder = yield* service.create({
+          name: "Orphan",
+          members: [{ projectId: API, baseBranch: "main" }],
+        });
+        const member = folder.members[0]!;
+        // The project leaves T3 Code while the folder still references it.
+        delete projectRoots[API];
+
+        const archived = yield* service.archiveMember({ slug: folder.slug, projectId: API });
+        expect(archived.members[0]?.archivedAt).not.toBeNull();
+        // git was never asked, because its repository is unknown now.
+        expect(harness.removedWorktrees).toEqual([]);
+        expect(yield* fs.exists(member.worktreePath)).toBe(false);
+
+        // Restoring keeps it archived instead of failing the whole folder.
+        const restored = yield* service.restoreMember({ slug: folder.slug, projectId: API });
+        expect(restored.members[0]?.archivedAt).not.toBeNull();
+
+        const deleted = yield* service.delete({ slug: folder.slug });
+        expect(deleted.slug).toBe(folder.slug);
+        expect(yield* fs.exists(folder.path)).toBe(false);
+        expect((yield* service.list()).folders).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("deleting a folder removes its worktrees and shared context", () =>
+    scenario((service) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const folder = yield* service.create({
+          name: "Throwaway",
+          members: [{ projectId: API, baseBranch: "main" }],
+        });
+        const member = folder.members[0]!;
+
+        const deleted = yield* service.delete({ slug: folder.slug });
+
+        expect(deleted.slug).toBe("throwaway");
+        expect(yield* fs.exists(member.worktreePath)).toBe(false);
+        expect(yield* fs.exists(folder.contextDir)).toBe(false);
+        const missing = yield* service.delete({ slug: folder.slug }).pipe(Effect.flip);
+        expect(missing.reason).toBe("not_found");
       }),
     ),
   );

@@ -216,12 +216,30 @@ function FolderGroup(props: {
   const setIssueStatus = useAtomCommand(folderEnvironment.setIssueStatus, {
     reportFailure: false,
   });
+  const deleteFolder = useAtomCommand(folderEnvironment.delete, { reportFailure: false });
   const issue = folder.issue;
   const openIssue = () => {
     if (!issue) return;
     void readLocalApi()?.shell.openExternal(issue.url);
   };
   const isArchived = folder.archivedAt !== null;
+
+  const remove = async () => {
+    const confirmed = await confirmDiscard(
+      `Delete ${folder.name}? Its worktrees and shared .context notes are removed. The branches stay.`,
+    );
+    if (!confirmed) return;
+    let result = await deleteFolder({ environmentId, input: { slug: folder.slug } });
+    if (
+      isDirtyWorktreeFailure(result) &&
+      (await confirmDiscard(
+        `Some worktrees in ${folder.name} have uncommitted changes. Delete anyway and discard them?`,
+      ))
+    ) {
+      result = await deleteFolder({ environmentId, input: { slug: folder.slug, force: true } });
+    }
+    settled("Could not delete the folder", result);
+  };
 
   const archive = async () => {
     let result = await archiveFolder({ environmentId, input: { slug: folder.slug } });
@@ -274,15 +292,19 @@ function FolderGroup(props: {
           </MenuTrigger>
           <MenuPopup align="end">
             {isArchived ? (
-              <MenuItem
-                onClick={() =>
-                  void restoreFolder({ environmentId, input: { slug: folder.slug } }).then(
-                    (result) => settled("Could not restore the folder", result),
-                  )
-                }
-              >
-                Restore folder
-              </MenuItem>
+              <>
+                <MenuItem
+                  onClick={() =>
+                    void restoreFolder({ environmentId, input: { slug: folder.slug } }).then(
+                      (result) => settled("Could not restore the folder", result),
+                    )
+                  }
+                >
+                  Restore folder
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem onClick={() => void remove()}>Delete folder…</MenuItem>
+              </>
             ) : (
               <>
                 {issue ? (
@@ -315,6 +337,7 @@ function FolderGroup(props: {
                 </MenuItem>
                 <MenuSeparator />
                 <MenuItem onClick={() => void archive()}>Archive folder</MenuItem>
+                <MenuItem onClick={() => void remove()}>Delete folder…</MenuItem>
               </>
             )}
           </MenuPopup>

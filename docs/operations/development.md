@@ -144,6 +144,27 @@ DMGs default to the host architecture. Use `--arch` to choose another target and
 to retain packaging files for inspection. Run `vp run dist:desktop:artifact --help` for other
 options.
 
+### Installing an unsigned build
+
+A local build carries an ad-hoc signature, so macOS quarantines it. Open the DMG, drag the app
+to `/Applications`, then either right-click it and choose **Open** once, or clear the flag:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/T3 Code.app"
+```
+
+The app runs its own server for projects on that machine. To also reach an environment running
+elsewhere, such as a server built from the same branch, create a pairing link on that host:
+
+```sh
+t3 pair --base-dir <its T3 home> --tailscale --tailscale-serve-port <port>
+```
+
+Paste the link into **Settings → Connections → Add environment**. See
+[remote access](../user/remote-access.md) for the other pairing routes. Clients only render the
+features their own build has: an official client can drive threads on a server built from a
+branch, but it will not show UI that branch adds.
+
 ### Linux AppImage prerequisites
 
 Build on Linux because the browser-secret helper links against the host's libsecret. Install

@@ -3056,6 +3056,10 @@ const makeWsRpcLayer = (
             folderService.restore(input).pipe(Effect.map((folder) => ({ folder }))),
             { "rpc.aggregate": "folder" },
           ),
+        [WS_METHODS.foldersDelete]: (input) =>
+          observeRpcEffect(WS_METHODS.foldersDelete, folderService.delete(input), {
+            "rpc.aggregate": "folder",
+          }),
         [WS_METHODS.foldersSetIssueStatus]: (input) =>
           observeRpcEffect(
             WS_METHODS.foldersSetIssueStatus,
