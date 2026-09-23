@@ -2,6 +2,8 @@
 
 Use a new thread for a separate task. Choose **New worktree** when its code changes
 need a separate branch and working directory.
+To group one feature's worktrees across repositories, with shared notes for its
+threads, use [folders](./folders.md).
 
 ## Start a thread
 

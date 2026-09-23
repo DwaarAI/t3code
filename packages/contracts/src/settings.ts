@@ -1220,6 +1220,11 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** Poll GitHub for open issues with `githubIssueFolderLabel` and create a folder for each. */
+  githubIssueFolders: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  githubIssueFolderLabel: TrimmedNonEmptyString.pipe(
+    Schema.withDecodingDefault(Effect.succeed("t3")),
+  ),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
       Effect.succeed({
@@ -1512,6 +1517,8 @@ export const ServerSettingsPatch = Schema.Struct({
   newWorktreesStartFromOrigin: Schema.optionalKey(Schema.Boolean),
   worktreeSubmodules: Schema.optionalKey(Schema.NullOr(WorktreeSubmodules)),
   addProjectBaseDirectory: Schema.optionalKey(TrimmedString),
+  githubIssueFolders: Schema.optionalKey(Schema.Boolean),
+  githubIssueFolderLabel: Schema.optionalKey(TrimmedNonEmptyString),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   sourceControlWritingStyle: Schema.optionalKey(
     Schema.Struct({

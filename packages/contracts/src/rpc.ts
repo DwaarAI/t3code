@@ -3,6 +3,19 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
+  FolderAddMemberInput,
+  FolderCreateInput,
+  FolderError,
+  FolderHandoffInput,
+  FolderHandoffResult,
+  FolderMemberRefInput,
+  FolderRefInput,
+  FolderResult,
+  FolderSetIssueStatusInput,
+  FoldersListInput,
+  FoldersListResult,
+} from "./folder.ts";
+import {
   ProviderAuthCancelInput,
   ProviderAuthCompleteInput,
   ProviderAuthState,
@@ -282,6 +295,17 @@ export const WS_METHODS = {
   projectsSearchContents: "projects.searchContents",
   projectsSearchEntries: "projects.searchEntries",
   projectsWriteFile: "projects.writeFile",
+
+  // Folder methods
+  foldersList: "folders.list",
+  foldersCreate: "folders.create",
+  foldersAddMember: "folders.addMember",
+  foldersArchiveMember: "folders.archiveMember",
+  foldersRestoreMember: "folders.restoreMember",
+  foldersArchive: "folders.archive",
+  foldersRestore: "folders.restore",
+  foldersWriteHandoff: "folders.writeHandoff",
+  foldersSetIssueStatus: "folders.setIssueStatus",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -945,6 +969,62 @@ const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
   error: Schema.Union([ProjectWriteFileError, EnvironmentAuthorizationError]),
 });
 
+const FolderRpcError = Schema.Union([FolderError, EnvironmentAuthorizationError]);
+
+const WsFoldersListRpc = Rpc.make(WS_METHODS.foldersList, {
+  payload: FoldersListInput,
+  success: FoldersListResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersCreateRpc = Rpc.make(WS_METHODS.foldersCreate, {
+  payload: FolderCreateInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersAddMemberRpc = Rpc.make(WS_METHODS.foldersAddMember, {
+  payload: FolderAddMemberInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersArchiveMemberRpc = Rpc.make(WS_METHODS.foldersArchiveMember, {
+  payload: FolderMemberRefInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersRestoreMemberRpc = Rpc.make(WS_METHODS.foldersRestoreMember, {
+  payload: FolderMemberRefInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersArchiveRpc = Rpc.make(WS_METHODS.foldersArchive, {
+  payload: FolderRefInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersRestoreRpc = Rpc.make(WS_METHODS.foldersRestore, {
+  payload: FolderRefInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersSetIssueStatusRpc = Rpc.make(WS_METHODS.foldersSetIssueStatus, {
+  payload: FolderSetIssueStatusInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersWriteHandoffRpc = Rpc.make(WS_METHODS.foldersWriteHandoff, {
+  payload: FolderHandoffInput,
+  success: FolderHandoffResult,
+  error: FolderRpcError,
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1458,6 +1538,15 @@ export const WsRpcGroup = RpcGroup.make(
   WsProjectsSearchContentsRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsWriteFileRpc,
+  WsFoldersListRpc,
+  WsFoldersCreateRpc,
+  WsFoldersAddMemberRpc,
+  WsFoldersArchiveMemberRpc,
+  WsFoldersRestoreMemberRpc,
+  WsFoldersArchiveRpc,
+  WsFoldersRestoreRpc,
+  WsFoldersWriteHandoffRpc,
+  WsFoldersSetIssueStatusRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,

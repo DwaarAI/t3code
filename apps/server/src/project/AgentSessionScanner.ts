@@ -552,12 +552,12 @@ function normalizeForWorktreeMatch(value: string, caseFold: boolean): string {
 
 function isT3ManagedWorktree(
   candidatePath: string,
-  worktreesDir: string,
+  managedDirs: ReadonlyArray<string>,
   caseFold: boolean,
 ): boolean {
   const normalized = normalizeForWorktreeMatch(candidatePath, caseFold);
   return (
-    normalized.startsWith(normalizeForWorktreeMatch(worktreesDir, caseFold)) ||
+    managedDirs.some((dir) => normalized.startsWith(normalizeForWorktreeMatch(dir, caseFold))) ||
     normalized.includes("/.t3/worktrees/")
   );
 }
@@ -626,7 +626,11 @@ export const make = Effect.gen(function* () {
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
   const baseDir = path.resolve(serverConfig.baseDir);
-  const worktreesDir = path.resolve(serverConfig.worktreesDir);
+  // Folder member worktrees are T3-managed too.
+  const managedWorktreeDirs = [
+    path.resolve(serverConfig.worktreesDir),
+    path.resolve(serverConfig.foldersDir),
+  ];
   // Windows filesystems are case-insensitive, so path prefix checks there
   // must case fold.
   const foldWorktreeCase = (yield* HostProcessPlatform) === "win32";
@@ -656,7 +660,7 @@ export const make = Effect.gen(function* () {
     normalizeForWorktreeMatch(candidatePath, foldWorktreeCase).startsWith(
       normalizeForWorktreeMatch(baseDir, foldWorktreeCase),
     ) ||
-    isT3ManagedWorktree(candidatePath, worktreesDir, foldWorktreeCase);
+    isT3ManagedWorktree(candidatePath, managedWorktreeDirs, foldWorktreeCase);
 
   const listDirectory = (directory: string) =>
     fileSystem.readDirectory(directory).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));

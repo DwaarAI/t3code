@@ -362,6 +362,8 @@ import {
   useThreadRefs,
   useThreadShell,
 } from "../state/entities";
+import { readNeedsFolderWorktreeSetup } from "../state/folders";
+import { FolderThreadTabs } from "./folders/FolderThreadTabs";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
@@ -8339,9 +8341,14 @@ export default function ChatView(props: ChatViewProps) {
     let turnStartSucceeded = false;
     let backgroundDraftOpened = false;
     if (failure === null && turnAttachmentsResult._tag === "Success") {
+      const runFolderSetupScript =
+        isLocalDraftThread &&
+        !baseBranchForWorktree &&
+        readNeedsFolderWorktreeSetup(activeThread.environmentId, activeThread.worktreePath);
       const bootstrap =
         isLocalDraftThread || baseBranchForWorktree
           ? {
+              ...(runFolderSetupScript ? { runSetupScript: true } : {}),
               ...(isLocalDraftThread
                 ? {
                     createThread: {
@@ -9832,6 +9839,12 @@ export default function ChatView(props: ChatViewProps) {
             onDeleteProjectScript={deleteProjectScript}
           />
         </WorkspacePageHeader>
+        <FolderThreadTabs
+          environmentId={activeThread.environmentId}
+          threadId={activeThread.id}
+          worktreePath={activeThread.worktreePath}
+          isServerThread={isServerThread}
+        />
 
         {/* Main content area with optional plan sidebar */}
         <div className="flex min-h-0 min-w-0 flex-1">

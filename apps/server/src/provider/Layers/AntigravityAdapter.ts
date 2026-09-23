@@ -37,6 +37,7 @@ import type * as EffectAcpSchema from "effect-acp/schema";
 
 import { ServerConfig } from "../../config.ts";
 import { buildRuntimeInstructions } from "../RuntimeInstructions.ts";
+import { resolveFolderSessionContext } from "../../folder/folderLayout.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import type { AntigravityAuth } from "../AntigravityAuth.ts";
 import {
@@ -796,7 +797,11 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
                 ...(mcp?.agentDeviceEnvironment
                   ? { agentDeviceEnvironment: mcp.agentDeviceEnvironment }
                   : {}),
-                additionalDirectories: [serverConfig.attachmentsDir],
+                additionalDirectories: [
+                  serverConfig.attachmentsDir,
+                  serverConfig.guidesDir,
+                  ...(resolveFolderSessionContext(cwd, serverConfig)?.writableDirs ?? []),
+                ],
                 ...(Option.isSome(cursor) ? { resumeSessionId: cursor.value.sessionId } : {}),
                 mcpServers: mcp
                   ? [
@@ -818,7 +823,12 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
               // capability. The agent gates each write behind
               // `session/request_permission`, so only path containment is
               // checked here.
-              const allowedRoots = [cwd, serverConfig.attachmentsDir];
+              const allowedRoots = [
+                cwd,
+                serverConfig.attachmentsDir,
+                serverConfig.guidesDir,
+                ...(resolveFolderSessionContext(cwd, serverConfig)?.writableDirs ?? []),
+              ];
               yield* runtime.handleReadTextFile((request) =>
                 readClientTextFile({ fileSystem, path, allowedRoots, request }),
               );
@@ -1085,7 +1095,11 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
                   ...prompt,
                   {
                     type: "text",
-                    text: buildRuntimeInstructions({ harness: "Antigravity", model }),
+                    text: buildRuntimeInstructions({
+                      harness: "Antigravity",
+                      model,
+                      folder: resolveFolderSessionContext(context.session.cwd, serverConfig),
+                    }),
                   },
                 ],
               },

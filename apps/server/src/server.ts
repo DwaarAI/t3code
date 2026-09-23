@@ -113,6 +113,9 @@ import * as PullRequestReadCache from "./pullRequest/PullRequestReadCache.ts";
 import * as SourceControlRateLimit from "./sourceControl/SourceControlRateLimit.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
+import * as FolderGitHub from "./folder/FolderGitHub.ts";
+import * as FolderIssueSync from "./folder/FolderIssueSync.ts";
+import * as FolderService from "./folder/FolderService.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
@@ -548,7 +551,15 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   ),
 );
 
-const RuntimeDependenciesLive = RuntimeCoreDependenciesLive.pipe(
+// Folder services sit on top of the core runtime: they read projections,
+// dispatch settle commands, and use git and the GitHub CLI.
+const FolderLayerLive = FolderIssueSync.layer.pipe(
+  Layer.provideMerge(FolderService.layer),
+  Layer.provideMerge(FolderGitHub.layer),
+);
+
+const RuntimeDependenciesLive = FolderLayerLive.pipe(
+  Layer.provideMerge(RuntimeCoreDependenciesLive),
   // Misc.
   Layer.provideMerge(BackgroundLayerLive),
   Layer.provideMerge(ResourceDiagnosticsLayerLive),

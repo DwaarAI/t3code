@@ -4,6 +4,8 @@ export interface ComposerPathSearchEntry {
   readonly path: string;
   readonly kind: "file" | "directory";
   readonly parentPath?: string;
+  /** Set for entries found outside the workspace, such as shared guides; `path` is absolute. */
+  readonly sourceLabel?: string;
 }
 
 export interface ComposerPathSearchState {

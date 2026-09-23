@@ -36,7 +36,9 @@ import {
 } from "../logicalProject";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { useUiStateStore } from "../uiStateStore";
+import { isFolderWorktree, useEnvironmentFolders } from "../state/folders";
 import { useCopyToClipboard } from "./useCopyToClipboard";
+import { useFolderHandoff } from "./useFolderHandoff";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
@@ -95,6 +97,8 @@ export function useThreadActionMenu(input: {
     reportFailure: false,
   });
   const handleNewThread = useNewThreadHandler();
+  const handOff = useFolderHandoff();
+  const environmentFolders = useEnvironmentFolders();
   const markThreadUnread = useUiStateStore((s) => s.markThreadUnread);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
@@ -140,6 +144,11 @@ export function useThreadActionMenu(input: {
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
         const items = buildThreadActionMenuItems({
           branch: thread.branch ?? null,
+          canHandoff: isFolderWorktree(
+            environmentFolders,
+            thread.environmentId,
+            thread.worktreePath,
+          ),
           // The chat header has no project-scoped thread list behind the
           // menu, so the "Filter by project" affordance is sidebar-only.
           projectFilter: null,
@@ -193,6 +202,9 @@ export function useThreadActionMenu(input: {
             });
             return;
           }
+          case "handoff":
+            await handOff(thread);
+            return;
           case "new-thread-on-branch": {
             // Explicit branch carry-over: reuse the thread's worktree when it
             // has one, otherwise its branch on the local checkout.
@@ -324,6 +336,8 @@ export function useThreadActionMenu(input: {
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
+      environmentFolders,
+      handOff,
       handleNewThread,
       logicalProjectKeyByPhysicalKey,
       markThreadUnread,

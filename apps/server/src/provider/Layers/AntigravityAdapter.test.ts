@@ -1228,13 +1228,13 @@ it.layer(layer)("AntigravityAdapter", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const h = yield* makeHarness();
-      const { attachmentsDir } = yield* ServerConfig;
+      const { attachmentsDir, guidesDir } = yield* ServerConfig;
       const cwd = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-fs-" });
       const outside = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-outside-" });
       yield* fs.writeFileString(path.join(cwd, "notes.txt"), "one\ntwo\nthree\n");
       yield* h.adapter.startSession({ threadId, cwd, runtimeMode: "approval-required" });
       expect(h.launches[0]?.clientFileSystem).toBe(true);
-      expect(h.launches[0]?.additionalDirectories).toEqual([attachmentsDir]);
+      expect(h.launches[0]?.additionalDirectories).toEqual([attachmentsDir, guidesDir]);
       const read = h.fileHandlers.read;
       const write = h.fileHandlers.write;
       if (!read || !write) return yield* Effect.die("File handlers were not registered.");
