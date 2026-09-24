@@ -79,8 +79,11 @@ const withMirror = <A, E>(
     );
     return yield* body({ mirror, contextDir: path.join(folderDir, ".context") });
   }).pipe(
-    Effect.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-folder-plans-" })),
-    Effect.provide(NodeServices.layer),
+    Effect.provide(
+      ServerConfig.layerTest(process.cwd(), { prefix: "t3-folder-plans-" }).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
   );
 
 describe("FolderPlanSync", () => {
