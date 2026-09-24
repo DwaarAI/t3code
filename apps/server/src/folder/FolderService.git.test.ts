@@ -120,6 +120,17 @@ describe("FolderService with git", () => {
         );
         expect(yield* fs.exists(path.join(folder.path, "web", "README.md"))).toBe(true);
 
+        // Shared notes are reachable from inside the repository, and git ignores the link.
+        const link = path.join(apiMember.worktreePath, ".context");
+        expect(yield* fs.readLink(link)).toBe(path.join("..", ".context"));
+        expect(yield* fs.exists(path.join(link, "plan.md"))).toBe(true);
+        expect(yield* gitOutput(apiMember.worktreePath, "status", "--porcelain")).toBe("");
+        // A worktree without the link (made before it existed) gets it on listing.
+        yield* fs.remove(link);
+        yield* service.list();
+        expect(yield* fs.readLink(link)).toBe(path.join("..", ".context"));
+        expect(yield* gitOutput(apiMember.worktreePath, "status", "--porcelain")).toBe("");
+
         yield* fs.writeFileString(path.join(apiMember.worktreePath, "wip.txt"), "unsaved");
         const dirty = yield* service
           .archiveMember({ slug: folder.slug, projectId: API })

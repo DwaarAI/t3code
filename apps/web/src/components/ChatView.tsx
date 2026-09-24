@@ -9841,6 +9841,7 @@ export default function ChatView(props: ChatViewProps) {
         </WorkspacePageHeader>
         <FolderThreadTabs
           environmentId={activeThread.environmentId}
+          projectId={activeThread.projectId}
           threadId={activeThread.id}
           worktreePath={activeThread.worktreePath}
           isServerThread={isServerThread}

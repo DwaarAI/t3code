@@ -8,7 +8,7 @@ import type * as Path from "effect/Path";
 
 export const FOLDER_MANIFEST_FILE = "folder.json";
 export const FOLDER_CONTEXT_DIR = ".context";
-export const FOLDER_CONTEXT_SUBDIRS = ["handoffs", "reviews"] as const;
+export const FOLDER_CONTEXT_SUBDIRS = ["handoffs", "reviews", "plans"] as const;
 
 export function slugifyFolderName(name: string): string {
   return name
@@ -24,13 +24,16 @@ export interface FolderScope {
   readonly slug: string;
   readonly folderDir: string;
   readonly contextDir: string;
-  readonly repoName: string;
+  /** The member worktree the cwd is in, or null for a folder session at the folder root. */
+  readonly repoName: string | null;
 }
 
 /**
- * A cwd belongs to a folder when it sits inside `<foldersDir>/<slug>/<repo>`.
- * String math on server-produced absolute paths, so provider adapters can call
- * it on every session start without extra services.
+ * A cwd belongs to a folder when it is the folder directory itself (a folder
+ * session that spans every repository) or sits inside one of its member
+ * worktrees, `<foldersDir>/<slug>/<repo>`. String math on server-produced
+ * absolute paths, so provider adapters can call it on every session start
+ * without extra services.
  */
 export function resolveFolderScope(
   cwd: string | undefined,
@@ -43,17 +46,29 @@ export function resolveFolderScope(
   const target = normalize(cwd);
   if (!target.startsWith(`${root}/`)) return null;
   const [slug, repoName] = target.slice(root.length + 1).split("/");
-  if (!slug || !repoName || slug === ".." || repoName === ".." || repoName === FOLDER_CONTEXT_DIR) {
-    return null;
-  }
+  if (!slug || slug === ".." || repoName === ".." || repoName === FOLDER_CONTEXT_DIR) return null;
   const folderDir = `${foldersDir.replace(/[\\/]+$/, "")}${sep}${slug}`;
-  return { slug, folderDir, contextDir: `${folderDir}${sep}${FOLDER_CONTEXT_DIR}`, repoName };
+  return {
+    slug,
+    folderDir,
+    contextDir: `${folderDir}${sep}${FOLDER_CONTEXT_DIR}`,
+    repoName: repoName ?? null,
+  };
 }
 
 export interface FolderSessionContext {
   /** Appended to the provider's system or developer instructions. */
   readonly instructions: string;
-  /** Directories outside the cwd the agent needs to write (the folder's .context). */
+  /**
+   * Directories outside the cwd a session may open, for providers that gate
+   * every access by directory (Claude, Antigravity): the whole folder, so a
+   * repository session can read its sibling repositories while planning.
+   */
+  readonly accessDirs: ReadonlyArray<string>;
+  /**
+   * Directories outside the cwd a sandbox must let the agent write, for
+   * providers that already read anywhere (Codex): only the shared notes.
+   */
   readonly writableDirs: ReadonlyArray<string>;
 }
 
@@ -64,10 +79,10 @@ export function resolveFolderSessionContext(
 ): FolderSessionContext | null {
   const scope = resolveFolderScope(cwd, config.foldersDir);
   if (scope === null) return null;
-  return {
-    instructions: buildFolderInstructions({ scope, guidesDir: config.guidesDir }),
-    writableDirs: [scope.contextDir],
-  };
+  const instructions = buildFolderInstructions({ scope, guidesDir: config.guidesDir });
+  // A folder session's cwd is the folder itself, which already covers everything.
+  if (scope.repoName === null) return { instructions, accessDirs: [], writableDirs: [] };
+  return { instructions, accessDirs: [scope.folderDir], writableDirs: [scope.contextDir] };
 }
 
 /** Pick a worktree directory name that no other member of the folder uses. */
@@ -129,24 +144,110 @@ Reusable guidelines, such as review checklists, are in \`${input.guidesDir}\`.
   };
 }
 
+export const REVIEW_GUIDE_FILE = "review.md";
+
+/** Guides seeded into the guides directory when missing; edited copies are kept. */
 export const SEED_GUIDES: Record<string, string> = {
-  "code-review.md": `# Code review guidelines
+  [REVIEW_GUIDE_FILE]: `# Review guidelines:
 
-Review the change against its goal, not against your own preferences.
+You are acting as a reviewer for a proposed code change made by another engineer.
 
-1. **Correctness.** Trace the changed code paths with realistic inputs. Look for
-   off-by-one errors, unhandled empty or null states, races, and error paths that
-   swallow failures.
-2. **Scope.** Flag changes unrelated to the goal and missing pieces the goal needs,
-   such as a way back out of a new state.
-3. **Tests.** Behavior changes need tests that fail without the change. Tests that
-   mirror the implementation do not count.
-4. **Simplicity.** Point out duplicated logic and machinery the change does not need.
-5. **Performance and security.** Note unbounded work, repeated IO in loops, and
-   untrusted input reaching a shell, a query, or the filesystem.
+Below are some default guidelines for determining whether the original author would appreciate the issue being flagged.
 
-Report each finding with the file and line, what goes wrong, and a concrete fix.
-Rank findings from most to least severe. Say so plainly when you find nothing.
+These are not the final word in determining whether an issue is a bug. In many cases, you will encounter other, more specific guidelines. These may be present elsewhere in a developer message, a user message, a file, or even elsewhere in this system message.
+Those guidelines should be considered to override these general instructions.
+
+Here are the general guidelines for determining whether something is a bug and should be flagged.
+
+1. It meaningfully impacts the accuracy, performance, security, or maintainability of the code.
+2. The bug is discrete and actionable (i.e. not a general issue with the codebase or a combination of multiple issues).
+3. Fixing the bug does not demand a level of rigor that is not present in the rest of the codebase (e.g. one doesn't need very detailed comments and input validation in a repository of one-off scripts in personal projects)
+4. The bug was introduced in the commit (pre-existing bugs should not be flagged).
+5. The author of the original PR would likely fix the issue if they were made aware of it.
+6. The bug does not rely on unstated assumptions about the codebase or author's intent.
+7. It is not enough to speculate that a change may disrupt another part of the codebase, to be considered a bug, one must identify the other parts of the code that are provably affected.
+8. The bug is clearly not just an intentional change by the original author.
+
+When flagging a bug, you will also provide an accompanying comment. Once again, these guidelines are not the final word on how to construct a comment -- defer to any subsequent guidelines that you encounter.
+
+1. The comment should be clear about why the issue is a bug.
+2. The comment should appropriately communicate the severity of the issue. It should not claim that an issue is more severe than it actually is.
+3. The comment should be brief. The body should be at most 1 paragraph. It should not introduce line breaks within the natural language flow unless it is necessary for the code fragment.
+4. The comment should not include any chunks of code longer than 3 lines. Any code chunks should be wrapped in markdown inline code tags or a code block.
+5. The comment should clearly and explicitly communicate the scenarios, environments, or inputs that are necessary for the bug to arise. The comment should immediately indicate that the issue's severity depends on these factors.
+6. The comment's tone should be matter-of-fact and not accusatory or overly positive. It should read as a helpful AI assistant suggestion without sounding too much like a human reviewer.
+7. The comment should be written such that the original author can immediately grasp the idea without close reading.
+8. The comment should avoid excessive flattery and comments that are not helpful to the original author. The comment should avoid phrasing like "Great job ...", "Thanks for ...".
+
+Below are some more detailed guidelines that you should apply to this specific review.
+
+HOW MANY FINDINGS TO RETURN:
+
+Output all findings that the original author would fix if they knew about it. If there is no finding that a person would definitely love to see and fix, prefer outputting no findings. Do not stop at the first qualifying finding. Continue until you've listed every qualifying finding.
+
+GUIDELINES:
+
+- Ignore trivial style unless it obscures meaning or violates documented standards.
+- Use one comment per distinct issue (or a multi-line range if necessary).
+- Use \`\`\`suggestion blocks ONLY for concrete replacement code (minimal lines; no commentary inside the block).
+- In every \`\`\`suggestion block, preserve the exact leading whitespace of the replaced lines (spaces vs tabs, number of spaces).
+- Do NOT introduce or remove outer indentation levels unless that is the actual fix.
+
+The comments will be presented in the code review as inline comments. You should avoid providing unnecessary location details in the comment body. Always keep the line range as short as possible for interpreting the issue. Avoid ranges longer than 5–10 lines; instead, choose the most suitable subrange that pinpoints the problem.
+
+## Getting the diff
+
+Review the branch against its base: the base named in the request (for example \`origin/main\`), or the repository's default branch. Run these in the repository's directory; in a T3 Code folder session, run them in each repository directory that changed.
+
+\`\`\`bash
+BASE=origin/main   # the base named in the request, when there is one
+git fetch origin --quiet
+
+# Get the merge base between this branch and the target
+MERGE_BASE=$(git merge-base "$BASE" HEAD)
+
+# Files that changed, then the committed diff against the merge base
+git diff --stat "$MERGE_BASE" HEAD
+git diff "$MERGE_BASE" HEAD
+
+# Any uncommitted changes (staged and unstaged), and new untracked files
+git diff HEAD
+git status --short
+\`\`\`
+
+Review the combination of these outputs: the committed changes on this branch relative to the target, plus any uncommitted work in progress.
+
+To find the branch's pull request, use the \`list_thread_pull_requests\` tool from the \`t3-code\` MCP server when it is available; otherwise run \`gh pr view --json number,url,baseRefName\`. \`gh pr diff <number>\` shows the pull request's diff, and \`gh api repos/{owner}/{repo}/pulls/{number}/comments\` lists the review comments already on it. Read those comments when the user asks you to address them.
+
+## Output format
+
+Write out a list of issues found, along with the location of each. **Only list ONE entry per unique issue.** For example:
+
+<example>
+### **#1 Empty input causes crash**
+
+If the input field is empty when page loads, the app will crash.
+
+File: src/client/frontends/desktop/ui/Input.tsx:42
+
+### **#2 Dead code**
+
+The getUserData function is now unused. It should be deleted.
+
+File: src/client/frontends/desktop/core/UserData.ts:10-18
+</example>
+
+When the repository belongs to a T3 Code folder (it has a \`.context\` directory beside it or linked in it), also save the list to \`.context/reviews/<date>-<repository>.md\`.
+
+Post the findings to the pull request only when the user asks. Then post each finding once, as an inline comment on the lines it names:
+
+\`\`\`bash
+gh api repos/{owner}/{repo}/pulls/{number}/comments \\
+  -f body='<comment>' -f commit_id="$(git rev-parse HEAD)" \\
+  -f path='<file>' -F line=<last line> -f side=RIGHT
+\`\`\`
+
+For a multi-line range, add \`-F start_line=<first line> -f start_side=RIGHT\`.
 `,
 };
 
@@ -156,11 +257,19 @@ function buildFolderInstructions(input: {
   readonly guidesDir: string;
 }): string {
   const { scope } = input;
-  return `<t3_folder>
-This thread works in the "${scope.repoName}" repository of the T3 Code folder "${scope.slug}". A folder groups the worktrees of one feature across repositories; ${FOLDER_MANIFEST_FILE} in ${scope.folderDir} lists them with their branches.
-Shared notes for the whole feature live in ${scope.contextDir}. Read README.md, plan.md, todos.md, and the newest file in handoffs/ before starting. Keep plan.md and todos.md current as work progresses, and write review findings to reviews/. Never copy these notes into a repository.
+  const notes = `Shared notes for the whole feature live in ${scope.contextDir}. Read README.md, plan.md, todos.md, and the newest file in handoffs/ before starting. Keep plan.md and todos.md current as work progresses, and write review findings to reviews/. Plans you propose in plan mode are saved to plans/ there and become plan.md automatically. Never commit these notes to a repository.
 When ${scope.contextDir}/issue.md exists, the folder works on that GitHub issue: read it and its parent issue, and post progress on the issue with gh as milestones land.
-Reusable guidelines, such as review checklists, are in ${input.guidesDir}.
+Reusable guidelines, such as review checklists, are in ${input.guidesDir}.`;
+  if (scope.repoName === null) {
+    return `<t3_folder>
+This is the folder-level session for the T3 Code folder "${scope.slug}", which spans several repositories. Your working directory is the folder: every subdirectory except .context is a git worktree of one repository, and ${FOLDER_MANIFEST_FILE} lists them with their branches. There is no repository at this level, so run git inside a repository's directory.
+Plan and coordinate work across the repositories: say which repository each change belongs in, keep interfaces between them consistent, and commit in each repository separately.
+${notes}
+</t3_folder>`;
+  }
+  return `<t3_folder>
+This thread works in the "${scope.repoName}" repository of the T3 Code folder "${scope.slug}". A folder groups the worktrees of one feature across repositories; ${FOLDER_MANIFEST_FILE} in ${scope.folderDir} lists them with their branches. The other repositories are sibling directories of this one: read them when the work crosses repositories, but change only this repository unless asked.
+${notes} The notes are also reachable as .context in this repository, a link git ignores.
 </t3_folder>`;
 }
 
@@ -259,4 +368,28 @@ export function handoffFileName(title: string, writtenAt: string): string {
   const stamp = writtenAt.slice(0, 16).replace("T", "-").replace(":", "");
   const slug = slugifyFolderName(title) || "thread";
   return `${stamp}-${slug}.md`;
+}
+
+/** `plans/<date>-<title>-<id>.md`: one file per proposed plan, rewritten as it changes. */
+export function planFileName(input: {
+  readonly planId: string;
+  readonly createdAt: string;
+  readonly threadTitle: string;
+}): string {
+  const stamp = input.createdAt.slice(0, 16).replace("T", "-").replace(":", "");
+  const slug = slugifyFolderName(input.threadTitle).slice(0, 40) || "plan";
+  const id = input.planId.replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "plan";
+  return `${stamp}-${slug}-${id}.md`;
+}
+
+/** A proposed plan as saved to `.context`, noting where it came from. */
+export function renderPlanFile(input: {
+  readonly planMarkdown: string;
+  readonly threadTitle: string;
+  readonly repoName: string | null;
+  readonly fileName: string | null;
+}): string {
+  const where = input.repoName === null ? "the folder session" : `the ${input.repoName} repository`;
+  const source = input.fileName ? `, saved as plans/${input.fileName}` : "";
+  return `<!-- Proposed in "${input.threadTitle}" (${where})${source}. -->\n\n${input.planMarkdown.trim()}\n`;
 }

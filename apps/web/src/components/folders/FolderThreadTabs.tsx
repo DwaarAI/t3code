@@ -1,30 +1,33 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { FolderWorktreeMatch } from "@t3tools/client-runtime/state/folders";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import type { FolderThreadMatch } from "@t3tools/client-runtime/state/folders";
+import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { FolderIcon, PlusIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 
-import { useStartFolderThread } from "../../hooks/useStartFolderThread";
+import { useStartFolderSession, useStartFolderThread } from "../../hooks/useStartFolderThread";
 import { useFolderHandoff } from "../../hooks/useFolderHandoff";
+import { useStartReview } from "../../hooks/useStartReview";
 import { cn } from "../../lib/utils";
 import { useThreadShells } from "../../state/entities";
-import { useFolderMemberForWorktree } from "../../state/folders";
+import { useFolderForThread } from "../../state/folders";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { Button } from "../ui/button";
 
 /**
- * Browser-style tabs for the threads of one folder worktree. Renders nothing
- * outside folders, so ordinary threads keep their layout.
+ * Browser-style tabs for the threads of one folder worktree, or of the folder
+ * session. Renders nothing outside folders, so ordinary threads keep their
+ * layout.
  */
 export const FolderThreadTabs = memo(function FolderThreadTabs(props: FolderThreadTabsProps) {
-  const match = useFolderMemberForWorktree(props.environmentId, props.worktreePath);
+  const match = useFolderForThread(props.environmentId, props.projectId, props.worktreePath);
   // Only folder threads pay for the thread-shell subscription below.
   return match === null ? null : <FolderThreadTabStrip {...props} match={match} />;
 });
 
 interface FolderThreadTabsProps {
   readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId;
   readonly threadId: ThreadId;
   readonly worktreePath: string | null;
   /** False for a draft, which has no thread to hand off yet. */
@@ -32,12 +35,15 @@ interface FolderThreadTabsProps {
 }
 
 function FolderThreadTabStrip(
-  props: FolderThreadTabsProps & { readonly match: FolderWorktreeMatch },
+  props: FolderThreadTabsProps & { readonly match: FolderThreadMatch },
 ) {
-  const { environmentId, threadId, worktreePath, match } = props;
+  const { environmentId, threadId, match } = props;
+  const { folder, member } = match;
   const router = useRouter();
   const startFolderThread = useStartFolderThread();
+  const startFolderSession = useStartFolderSession();
   const handOff = useFolderHandoff();
+  const startReview = useStartReview();
   const allThreads = useThreadShells();
   const threads = useMemo(
     () =>
@@ -45,17 +51,22 @@ function FolderThreadTabStrip(
         .filter(
           (thread) =>
             thread.environmentId === environmentId &&
-            thread.worktreePath === worktreePath &&
-            thread.archivedAt === null,
+            thread.archivedAt === null &&
+            (member
+              ? thread.worktreePath === member.worktreePath
+              : thread.worktreePath === null && thread.projectId === folder.rootProjectId),
         )
         .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt)),
-    [allThreads, environmentId, worktreePath],
+    [allThreads, environmentId, folder.rootProjectId, member],
   );
-  const { folder, member } = match;
+  const scopeLabel = member?.repoName ?? "All repositories";
   const isDraft = !threads.some((thread) => thread.id === threadId);
   const current = threads.find((thread) => thread.id === threadId);
 
-  const newThread = () => void startFolderThread(environmentId, folder, member);
+  const newThread = () =>
+    void (member
+      ? startFolderThread(environmentId, folder, member)
+      : startFolderSession(environmentId, folder));
 
   return (
     <div className="flex h-9 min-w-0 shrink-0 items-center gap-1 border-border border-b bg-background px-2">
@@ -63,11 +74,11 @@ function FolderThreadTabStrip(
         <FolderIcon aria-hidden className="size-3.5" />
         <span className="max-w-32 truncate">{folder.name}</span>
         <span aria-hidden>/</span>
-        <span className="max-w-32 truncate">{member.repoName}</span>
+        <span className="max-w-32 truncate">{scopeLabel}</span>
       </span>
       <div
         role="tablist"
-        aria-label={`Threads in ${member.repoName}`}
+        aria-label={`Threads in ${scopeLabel}`}
         className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
       >
         {threads.map((thread) => {
@@ -111,16 +122,21 @@ function FolderThreadTabStrip(
         <Button
           size="icon-xs"
           variant="ghost"
-          aria-label="New thread in this worktree"
+          aria-label={member ? "New thread in this worktree" : "New folder session"}
           onClick={newThread}
         >
           <PlusIcon />
         </Button>
       </div>
       {props.isServerThread && current ? (
-        <Button size="xs" variant="ghost" onClick={() => void handOff(current)}>
-          Handoff
-        </Button>
+        <>
+          <Button size="xs" variant="ghost" onClick={() => void startReview(current)}>
+            Review
+          </Button>
+          <Button size="xs" variant="ghost" onClick={() => void handOff(current)}>
+            Handoff
+          </Button>
+        </>
       ) : null}
     </div>
   );

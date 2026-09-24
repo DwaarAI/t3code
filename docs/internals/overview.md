@@ -45,12 +45,16 @@ See [provider constraints](./providers.md).
 
 A [folder](../../apps/server/src/folder/FolderService.ts) is a directory under
 `<T3 home>/folders/`, not an orchestration aggregate: `folder.json` there is the source of truth,
-and member worktrees and `.context/` sit beside it. Threads join a folder only by running in a
-member worktree, so thread commands, events, and older clients are unaffected. Clients read folders
-through the `folders.*` RPCs, gated by the `folders` capability, and refetch after mutations
-instead of subscribing. Provider adapters derive the folder from the session cwd
+and member worktrees and `.context/` sit beside it. Threads join a folder only by where they run:
+in a member worktree, or, for a folder session spanning every repository, in an ordinary project
+rooted at the folder directory (`rootProjectId`, created on first use). Thread commands, events,
+and older clients are unaffected, which is why folder sessions reach mobile unchanged. Clients read
+folders through the `folders.*` RPCs, gated by the `folders` capability, and refetch after
+mutations instead of subscribing. Provider adapters derive the folder from the session cwd
 ([`resolveFolderSessionContext`](../../apps/server/src/folder/folderLayout.ts)) to add
-instructions and grant write access to `.context/`; keep that pure so it stays cheap per session.
+instructions and grant access; keep that pure so it stays cheap per session.
+[FolderPlanSync](../../apps/server/src/folder/FolderPlanSync.ts) mirrors proposed plans into
+`.context/` from the event stream, so plans stay in orchestration and the files are a copy.
 [FolderIssueSync](../../apps/server/src/folder/FolderIssueSync.ts) polls GitHub with the server's
 `gh` login rather than taking webhooks, so it works behind NAT. It creates folders but never starts
 a turn: issue text becomes agent instructions, so a person starts the agent, and only issues whose

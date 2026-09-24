@@ -168,6 +168,9 @@ const makeLayer = (harness: Harness) =>
         dispatch: (command) =>
           Effect.sync(() => {
             harness.dispatched.push(command);
+            if (command.type === "project.create") {
+              projectRoots[command.projectId] = command.workspaceRoot;
+            }
             return { sequence: harness.dispatched.length };
           }),
       }),
@@ -230,7 +233,7 @@ describe("FolderService", () => {
 
         const listed = yield* service.list();
         expect(listed.folders.map((entry) => entry.slug)).toEqual(["auth-revamp"]);
-        expect(yield* fs.exists(path.join(listed.guidesDir, "code-review.md"))).toBe(true);
+        expect(yield* fs.exists(path.join(listed.guidesDir, "review.md"))).toBe(true);
 
         const duplicate = yield* service
           .create({ name: "auth revamp", members: [{ projectId: API, baseBranch: "main" }] })
@@ -453,6 +456,38 @@ describe("FolderService", () => {
         expect(yield* fs.exists(folder.contextDir)).toBe(false);
         const missing = yield* service.delete({ slug: folder.slug }).pipe(Effect.flip);
         expect(missing.reason).toBe("not_found");
+      }),
+    ),
+  );
+  it.effect("opens one folder session project and removes it with the folder", () =>
+    scenario((service, harness) =>
+      Effect.gen(function* () {
+        const folder = yield* service.create({
+          name: "Multi",
+          members: [
+            { projectId: API, baseBranch: "main" },
+            { projectId: WEB, baseBranch: "main" },
+          ],
+        });
+
+        const opened = yield* service.openRoot({ slug: folder.slug });
+        const reopened = yield* service.openRoot({ slug: folder.slug });
+
+        expect(opened.rootProjectId).toBeDefined();
+        expect(reopened.rootProjectId).toBe(opened.rootProjectId);
+        const creates = harness.dispatched.filter((command) => command.type === "project.create");
+        expect(creates).toEqual([
+          expect.objectContaining({ title: "Multi", workspaceRoot: folder.path }),
+        ]);
+
+        yield* service.delete({ slug: folder.slug });
+        expect(harness.dispatched).toContainEqual(
+          expect.objectContaining({
+            type: "project.delete",
+            projectId: opened.rootProjectId,
+            force: true,
+          }),
+        );
       }),
     ),
   );

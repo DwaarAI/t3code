@@ -54,7 +54,8 @@ export function useFolderHandoff() {
         handleNewThread(scopeProjectRef(thread.environmentId, thread.projectId), {
           branch: thread.branch,
           worktreePath: thread.worktreePath,
-          envMode: "worktree",
+          // A folder session has no worktree; it runs in the folder's own project.
+          envMode: thread.worktreePath ? "worktree" : "local",
           startFromOrigin: false,
         }),
       );

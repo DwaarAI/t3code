@@ -1,8 +1,10 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   createFolderEnvironmentAtoms,
+  findFolderForCwd,
+  findFolderForThread,
   findFolderMemberForWorktree,
-  type FolderWorktreeMatch,
+  type FolderThreadMatch,
 } from "@t3tools/client-runtime/state/folders";
 import type { EnvironmentId, Folder } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -73,28 +75,48 @@ export function useFoldersForEnvironment(
   );
 }
 
-/** The folder and member a worktree belongs to, or null outside folders. */
-export function useFolderMemberForWorktree(
+/** The folder a thread belongs to (null member for a folder session), or null outside folders. */
+export function useFolderForThread(
   environmentId: EnvironmentId | null,
+  projectId: string | null,
   worktreePath: string | null | undefined,
-): (FolderWorktreeMatch & { readonly environment: EnvironmentFolders }) | null {
+): (FolderThreadMatch & { readonly environment: EnvironmentFolders }) | null {
+  const environment = useFoldersForEnvironment(environmentId);
+  return useMemo(() => {
+    if (environment === null || projectId === null) return null;
+    const match = findFolderForThread(environment.folders, { projectId, worktreePath });
+    return match ? { ...match, environment } : null;
+  }, [environment, projectId, worktreePath]);
+}
+
+/** The folder whose member worktree or own directory is `cwd`. */
+export function useFolderForCwd(
+  environmentId: EnvironmentId | null,
+  cwd: string | null | undefined,
+): (FolderThreadMatch & { readonly environment: EnvironmentFolders }) | null {
   const environment = useFoldersForEnvironment(environmentId);
   return useMemo(() => {
     if (environment === null) return null;
-    const match = findFolderMemberForWorktree(environment.folders, worktreePath);
+    const match = findFolderForCwd(environment.folders, cwd);
     return match ? { ...match, environment } : null;
-  }, [environment, worktreePath]);
+  }, [cwd, environment]);
 }
 
-/** Every folder member worktree path, keyed by environment, for filtering thread lists. */
-export function useFolderWorktreeKeys(): ReadonlySet<string> {
+/**
+ * Keys for every folder member worktree and folder session project, so thread
+ * lists can leave folder threads to the Folders section. See `isFolderThreadKey`.
+ */
+export function useFolderThreadKeys(): ReadonlySet<string> {
   const all = useEnvironmentFolders();
   return useMemo(() => {
     const keys = new Set<string>();
     for (const environment of all) {
       for (const folder of environment.folders) {
         for (const member of folder.members) {
-          keys.add(folderWorktreeKey(environment.environmentId, member.worktreePath));
+          keys.add(`${environment.environmentId}\u0000${member.worktreePath}`);
+        }
+        if (folder.rootProjectId) {
+          keys.add(`${environment.environmentId}\u0000project:${folder.rootProjectId}`);
         }
       }
     }
@@ -102,18 +124,24 @@ export function useFolderWorktreeKeys(): ReadonlySet<string> {
   }, [all]);
 }
 
-export function isFolderWorktree(
-  all: ReadonlyArray<EnvironmentFolders>,
-  environmentId: EnvironmentId,
-  worktreePath: string | null | undefined,
+export function isFolderThreadKey(
+  keys: ReadonlySet<string>,
+  thread: {
+    readonly environmentId: EnvironmentId;
+    readonly projectId: string;
+    readonly worktreePath: string | null;
+  },
 ): boolean {
-  const environment = all.find((entry) => entry.environmentId === environmentId);
-  return (
-    environment !== undefined &&
-    findFolderMemberForWorktree(environment.folders, worktreePath) !== null
-  );
+  return thread.worktreePath === null
+    ? keys.has(`${thread.environmentId}\u0000project:${thread.projectId}`)
+    : keys.has(`${thread.environmentId}\u0000${thread.worktreePath}`);
 }
 
-export function folderWorktreeKey(environmentId: EnvironmentId, worktreePath: string): string {
-  return `${environmentId}\u0000${worktreePath}`;
+export function isFolderThread(
+  all: ReadonlyArray<EnvironmentFolders>,
+  environmentId: EnvironmentId,
+  thread: { readonly projectId: string; readonly worktreePath: string | null | undefined },
+): boolean {
+  const environment = all.find((entry) => entry.environmentId === environmentId);
+  return environment !== undefined && findFolderForThread(environment.folders, thread) !== null;
 }

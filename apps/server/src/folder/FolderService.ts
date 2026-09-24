@@ -77,6 +77,11 @@ export class FolderService extends Context.Service<
     ) => Effect.Effect<Folder, FolderError>;
     /** Removes the worktrees and the folder directory, including `.context`. */
     readonly delete: (input: FolderRefInput) => Effect.Effect<FolderDeleteResult, FolderError>;
+    /**
+     * The project rooted at the folder directory, created on first use, so a
+     * folder session can work across every repository.
+     */
+    readonly openRoot: (input: FolderRefInput) => Effect.Effect<Folder, FolderError>;
     /** Copies the project's `.env*` files into a member worktree again, replacing older copies. */
     readonly copyEnvFiles: (input: FolderMemberRefInput) => Effect.Effect<Folder, FolderError>;
     readonly writeHandoff: (
@@ -109,6 +114,7 @@ export const make = Effect.gen(function* () {
   // Manifest writes read-modify-write the file, so mutations run one at a time.
   const mutation = yield* Semaphore.make(1);
 
+  const newId = crypto.randomUUIDv4.pipe(Effect.mapError(ioFailed("Could not generate an id.")));
   const folderDirFor = (slug: string) => path.join(foldersDir, slug);
   const manifestPathFor = (slug: string) => path.join(folderDirFor(slug), FOLDER_MANIFEST_FILE);
   const toFolder = (manifest: FolderManifest): Folder => ({
@@ -117,11 +123,13 @@ export const make = Effect.gen(function* () {
     contextDir: path.join(folderDirFor(manifest.slug), FOLDER_CONTEXT_DIR),
   });
 
+  // Each seed is written only while missing: edits are kept, and a deleted
+  // guide comes back on the next listing.
   const ensureGuidesDir = Effect.gen(function* () {
-    if (yield* fs.exists(guidesDir)) return;
     yield* fs.makeDirectory(guidesDir, { recursive: true });
     for (const [name, contents] of Object.entries(SEED_GUIDES)) {
-      yield* fs.writeFileString(path.join(guidesDir, name), contents);
+      const target = path.join(guidesDir, name);
+      if (!(yield* fs.exists(target))) yield* fs.writeFileString(target, contents);
     }
   }).pipe(Effect.mapError(ioFailed(`Could not create the guides directory at ${guidesDir}.`)));
 
@@ -292,6 +300,40 @@ export const make = Effect.gen(function* () {
       ),
     );
 
+  /**
+   * Link `.context` into a worktree so repository sessions reach the shared
+   * notes by a relative path, and hide the link from git through the
+   * repository's local exclude file. Skipped when the repository already has
+   * its own `.context`.
+   */
+  const linkContextDir = (worktreePath: string) =>
+    Effect.gen(function* () {
+      const linkPath = path.join(worktreePath, FOLDER_CONTEXT_DIR);
+      if (yield* fs.exists(linkPath)) return;
+      yield* fs.symlink(path.join("..", FOLDER_CONTEXT_DIR), linkPath);
+      const commonDir = yield* gitDriver.execute({
+        operation: "FolderService.resolveGitCommonDir",
+        cwd: worktreePath,
+        args: ["rev-parse", "--git-common-dir"],
+      });
+      const excludePath = path.join(
+        path.resolve(worktreePath, commonDir.stdout.trim()),
+        "info",
+        "exclude",
+      );
+      const current = yield* fs.readFileString(excludePath).pipe(Effect.orElseSucceed(() => ""));
+      if (current.split("\n").includes(`/${FOLDER_CONTEXT_DIR}`)) return;
+      yield* fs.makeDirectory(path.dirname(excludePath), { recursive: true });
+      yield* fs.writeFileString(
+        excludePath,
+        `${current}${current === "" || current.endsWith("\n") ? "" : "\n"}/${FOLDER_CONTEXT_DIR}\n`,
+      );
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(`Could not link .context into ${worktreePath}`, error),
+      ),
+    );
+
   /** Worktree plus the default setup every new worktree gets. */
   const prepareWorktree = (input: {
     readonly projectRoot: string;
@@ -301,6 +343,7 @@ export const make = Effect.gen(function* () {
   }) =>
     Effect.gen(function* () {
       const baseRef = yield* checkOutWorktree(input);
+      yield* linkContextDir(input.worktreePath);
       const envFiles = yield* copyProjectEnvFiles({
         projectRoot: input.projectRoot,
         worktreePath: input.worktreePath,
@@ -376,14 +419,16 @@ export const make = Effect.gen(function* () {
     });
 
   /** Settle the worktree's live threads so they leave active lists everywhere. */
-  const settleMemberThreads = (member: FolderMember) =>
+  const settleThreadsWhere = (
+    belongs: (thread: {
+      readonly worktreePath: string | null;
+      readonly projectId: string;
+    }) => boolean,
+  ) =>
     Effect.gen(function* () {
       const snapshot = yield* snapshotQuery.getShellSnapshot();
       const threads = snapshot.threads.filter(
-        (thread) =>
-          thread.worktreePath === member.worktreePath &&
-          thread.archivedAt === null &&
-          thread.settledAt == null,
+        (thread) => belongs(thread) && thread.archivedAt === null && thread.settledAt == null,
       );
       for (const thread of threads) {
         const uuid = yield* crypto.randomUUIDv4;
@@ -399,6 +444,17 @@ export const make = Effect.gen(function* () {
         Effect.logWarning("Could not settle threads of an archived folder worktree", cause),
       ),
     );
+
+  const settleMemberThreads = (member: FolderMember) =>
+    settleThreadsWhere((thread) => thread.worktreePath === member.worktreePath);
+
+  /** Folder sessions run in the folder's own project, not in a member worktree. */
+  const settleRootThreads = (manifest: FolderManifest) =>
+    manifest.rootProjectId === undefined
+      ? Effect.void
+      : settleThreadsWhere(
+          (thread) => thread.projectId === manifest.rootProjectId && thread.worktreePath === null,
+        );
 
   const findMember = (manifest: FolderManifest, projectId: ProjectId) => {
     const member = manifest.members.find((candidate) => candidate.projectId === projectId);
@@ -464,6 +520,17 @@ export const make = Effect.gen(function* () {
           ),
         );
         if (Option.isSome(manifest)) folders.push(toFolder(manifest.value));
+      }
+      // Worktrees made before `.context` was linked, or whose link was
+      // deleted, get it back. Only a missing link costs any work.
+      for (const folder of folders) {
+        for (const member of folder.members) {
+          if (member.archivedAt !== null) continue;
+          if (!(yield* fs.exists(member.worktreePath).pipe(Effect.orElseSucceed(() => false)))) {
+            continue;
+          }
+          yield* linkContextDir(member.worktreePath);
+        }
       }
       folders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       return { foldersDir, guidesDir, folders };
@@ -660,6 +727,7 @@ export const make = Effect.gen(function* () {
             yield* writeManifest(manifest);
           }
         }
+        yield* settleRootThreads(manifest);
         return yield* writeManifest({ ...manifest, archivedAt: yield* nowIso });
       }),
     );
@@ -676,6 +744,41 @@ export const make = Effect.gen(function* () {
           }
         }
         return yield* writeManifest({ ...manifest, archivedAt: null });
+      }),
+    );
+
+  const openRoot: FolderService["Service"]["openRoot"] = (input) =>
+    mutation.withPermits(1)(
+      Effect.gen(function* () {
+        const manifest = yield* readManifest(input.slug);
+        if (manifest.rootProjectId !== undefined) {
+          const existing = yield* snapshotQuery
+            .getProjectShellById(manifest.rootProjectId)
+            .pipe(Effect.mapError(ioFailed("Could not read projects.")));
+          if (Option.isSome(existing)) return toFolder(manifest);
+        }
+        const uuid = yield* newId;
+        const projectId = ProjectId.make(uuid);
+        yield* orchestrationEngine
+          .dispatch({
+            type: "project.create",
+            commandId: CommandId.make(`server:folder-root:${uuid}`),
+            projectId,
+            title: manifest.name,
+            workspaceRoot: folderDirFor(manifest.slug),
+            createdAt: yield* nowIso,
+          })
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new FolderError({
+                  reason: "io_failed",
+                  detail: `Could not create the folder session project for '${manifest.slug}'.`,
+                  cause,
+                }),
+            ),
+          );
+        return yield* writeManifest({ ...manifest, rootProjectId: projectId });
       }),
     );
 
@@ -710,6 +813,22 @@ export const make = Effect.gen(function* () {
           yield* removeMemberWorktree(member, input.force === true);
           yield* settleMemberThreads(member);
         }
+        if (manifest.rootProjectId !== undefined) {
+          // The folder session project dies with its directory, threads included.
+          const uuid = yield* newId;
+          yield* orchestrationEngine
+            .dispatch({
+              type: "project.delete",
+              commandId: CommandId.make(`server:folder-delete:${uuid}`),
+              projectId: manifest.rootProjectId,
+              force: true,
+            })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("Could not delete the folder session project", cause),
+              ),
+            );
+        }
         // The manifest goes with the directory, so `.context` notes go too.
         yield* fs
           .remove(folderDirFor(manifest.slug), { recursive: true })
@@ -731,7 +850,8 @@ export const make = Effect.gen(function* () {
             }),
           ),
         );
-      const scope = resolveFolderScope(thread.worktreePath ?? undefined, foldersDir);
+      const cwd = thread.worktreePath ?? (yield* resolveProjectRoot(thread.projectId));
+      const scope = resolveFolderScope(cwd, foldersDir);
       if (scope === null) {
         return yield* fail("not_in_folder", "Handoffs are available for threads in a folder.");
       }
@@ -769,6 +889,7 @@ export const make = Effect.gen(function* () {
     setIssueStatus,
     delete: deleteFolder,
     copyEnvFiles,
+    openRoot,
     writeHandoff,
   });
 });

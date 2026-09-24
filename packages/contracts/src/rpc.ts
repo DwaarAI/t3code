@@ -312,6 +312,7 @@ export const WS_METHODS = {
   foldersSetIssueStatus: "folders.setIssueStatus",
   foldersDelete: "folders.delete",
   foldersCopyEnvFiles: "folders.copyEnvFiles",
+  foldersOpenRoot: "folders.openRoot",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -1026,6 +1027,12 @@ const WsFoldersRestoreRpc = Rpc.make(WS_METHODS.foldersRestore, {
   error: FolderRpcError,
 });
 
+const WsFoldersOpenRootRpc = Rpc.make(WS_METHODS.foldersOpenRoot, {
+  payload: FolderRefInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
 const WsFoldersCopyEnvFilesRpc = Rpc.make(WS_METHODS.foldersCopyEnvFiles, {
   payload: FolderMemberRefInput,
   success: FolderResult,
@@ -1575,6 +1582,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFoldersSetIssueStatusRpc,
   WsFoldersDeleteRpc,
   WsFoldersCopyEnvFilesRpc,
+  WsFoldersOpenRootRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,

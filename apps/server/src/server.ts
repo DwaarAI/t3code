@@ -115,6 +115,7 @@ import * as SourceControlRepositoryService from "./sourceControl/SourceControlRe
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderGitHub from "./folder/FolderGitHub.ts";
 import * as FolderIssueSync from "./folder/FolderIssueSync.ts";
+import * as FolderPlanSync from "./folder/FolderPlanSync.ts";
 import * as FolderService from "./folder/FolderService.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability.ts";
@@ -553,7 +554,7 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
 
 // Folder services sit on top of the core runtime: they read projections,
 // dispatch settle commands, and use git and the GitHub CLI.
-const FolderLayerLive = FolderIssueSync.layer.pipe(
+const FolderLayerLive = Layer.mergeAll(FolderIssueSync.layer, FolderPlanSync.layer).pipe(
   Layer.provideMerge(FolderService.layer),
   Layer.provideMerge(FolderGitHub.layer),
 );

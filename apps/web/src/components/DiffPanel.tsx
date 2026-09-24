@@ -124,6 +124,10 @@ interface DiffPanelProps {
   workspaceMutationId: string | null;
 }
 
+/** Scope names that say plainly whether the changes are committed. */
+const UNCOMMITTED_LABEL = "Uncommitted changes";
+const COMMITTED_LABEL = "Committed on branch";
+
 export default function DiffPanel({
   mode = "inline",
   composerDraftTarget,
@@ -231,8 +235,8 @@ export default function DiffPanel({
   const selectedScopeLabel =
     selectedTurnId === null
       ? selectedGitScope === "unstaged"
-        ? "Working tree"
-        : "Branch changes"
+        ? UNCOMMITTED_LABEL
+        : COMMITTED_LABEL
       : selectedTurn?.turnId === latestTurn?.turnId
         ? "Latest turn"
         : `Turn ${selectedCheckpointTurnCount ?? "?"}`;
@@ -244,8 +248,8 @@ export default function DiffPanel({
   const reviewSectionTitle = selectedTurn
     ? `Turn ${selectedCheckpointTurnCount ?? "?"}`
     : selectedGitScope === "unstaged"
-      ? "Working tree"
-      : "Branch changes";
+      ? UNCOMMITTED_LABEL
+      : COMMITTED_LABEL;
   const selectedCheckpointRange = useMemo(
     () =>
       typeof selectedCheckpointTurnCount === "number"
@@ -308,6 +312,14 @@ export default function DiffPanel({
   const selectedGitSource = branchDiffPreview.data?.sources.find(
     (source) => source.kind === (selectedGitScope === "unstaged" ? "working-tree" : "branch-range"),
   );
+  // Both sources arrive together, so the header can always say how much is
+  // committed and how much is not, whichever one is on screen.
+  const gitSourceFileCount = (kind: "working-tree" | "branch-range") => {
+    const source = branchDiffPreview.data?.sources.find((candidate) => candidate.kind === kind);
+    return source?.files ? source.files.length : null;
+  };
+  const uncommittedFileCount = gitSourceFileCount("working-tree");
+  const committedFileCount = gitSourceFileCount("branch-range");
   const refreshPreviewQuery = branchDiffPreview.refresh;
   const refreshDiffFromUserAction = refreshPreviewQuery;
 
@@ -666,7 +678,12 @@ export default function DiffPanel({
               }
               onClick={() => selectGitScope("unstaged")}
             >
-              <span>Working tree</span>
+              <span className="flex min-w-0 flex-col">
+                <span>{UNCOMMITTED_LABEL}</span>
+                <span className="text-muted-foreground text-xs">
+                  Staged, unstaged, and new files
+                </span>
+              </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className={
@@ -676,7 +693,12 @@ export default function DiffPanel({
               }
               onClick={() => selectGitScope("branch")}
             >
-              <span>Branch changes</span>
+              <span className="flex min-w-0 flex-col">
+                <span>{COMMITTED_LABEL}</span>
+                <span className="text-muted-foreground text-xs">
+                  Commits on this branch since its base
+                </span>
+              </span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className={
@@ -717,6 +739,36 @@ export default function DiffPanel({
             </DropdownMenuSub>
           </DropdownMenuContent>
         </DropdownMenu>
+        {selectedTurnId === null && isGitRepo ? (
+          <div
+            role="group"
+            aria-label="Committed and uncommitted changes"
+            className="flex shrink-0 items-center gap-0.5 rounded-md bg-muted/60 p-0.5 text-xs"
+          >
+            {(
+              [
+                ["unstaged", "Uncommitted", uncommittedFileCount],
+                ["branch", "Committed", committedFileCount],
+              ] as const
+            ).map(([scope, label, count]) => (
+              <button
+                key={scope}
+                type="button"
+                aria-pressed={selectedGitScope === scope}
+                onClick={() => selectGitScope(scope)}
+                className={cn(
+                  "inline-flex h-5 items-center gap-1 rounded px-1.5",
+                  selectedGitScope === scope
+                    ? "bg-background font-medium text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+                <span className="tabular-nums opacity-70">{count ?? "–"}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {selectedTurnId === null && selectedGitScope === "branch" && selectedGitSource?.baseRef && (
           <div
             className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden text-xs text-muted-foreground"

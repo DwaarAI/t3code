@@ -5,6 +5,8 @@ import type { OrchestrationThread } from "@t3tools/contracts";
 import {
   buildHandoffMarkdown,
   envFilesToCopy,
+  planFileName,
+  renderPlanFile,
   resolveFolderScope,
   resolveFolderSessionContext,
   slugifyFolderName,
@@ -25,10 +27,18 @@ describe("resolveFolderScope", () => {
     );
   });
 
-  it("ignores paths that are not member worktrees", () => {
+  it("resolves the folder directory itself as a folder session", () => {
+    expect(resolveFolderScope("/home/me/.t3/folders/auth", foldersDir)).toEqual({
+      slug: "auth",
+      folderDir: "/home/me/.t3/folders/auth",
+      contextDir: "/home/me/.t3/folders/auth/.context",
+      repoName: null,
+    });
+  });
+
+  it("ignores paths outside folders and the shared notes themselves", () => {
     expect(resolveFolderScope(undefined, foldersDir)).toBeNull();
     expect(resolveFolderScope("/home/me/.t3/folders", foldersDir)).toBeNull();
-    expect(resolveFolderScope("/home/me/.t3/folders/auth", foldersDir)).toBeNull();
     expect(resolveFolderScope("/home/me/.t3/folders/auth/.context", foldersDir)).toBeNull();
     expect(resolveFolderScope("/home/me/.t3/folders-old/auth/api", foldersDir)).toBeNull();
     expect(resolveFolderScope("/repos/api", foldersDir)).toBeNull();
@@ -41,13 +51,26 @@ describe("resolveFolderScope", () => {
     ).toBe("C:\\Users\\me\\.t3\\folders\\auth\\.context");
   });
 
-  it("grants the .context directory to sessions in a folder", () => {
+  it("lets repository sessions read the whole folder but write only the notes", () => {
     const context = resolveFolderSessionContext("/home/me/.t3/folders/auth/api", {
       foldersDir,
       guidesDir: "/home/me/.t3/guides",
     });
+    expect(context?.accessDirs).toEqual(["/home/me/.t3/folders/auth"]);
     expect(context?.writableDirs).toEqual(["/home/me/.t3/folders/auth/.context"]);
+    expect(context?.instructions).toContain('the "api" repository');
     expect(context?.instructions).toContain("/home/me/.t3/guides");
+  });
+
+  it("tells a folder session it spans every repository", () => {
+    const context = resolveFolderSessionContext("/home/me/.t3/folders/auth", {
+      foldersDir,
+      guidesDir: "/home/me/.t3/guides",
+    });
+    // The cwd is the folder, so nothing outside it needs granting.
+    expect(context?.accessDirs).toEqual([]);
+    expect(context?.writableDirs).toEqual([]);
+    expect(context?.instructions).toContain("folder-level session");
   });
 });
 
@@ -126,5 +149,25 @@ describe("envFilesToCopy", () => {
         "",
       ]),
     ).toEqual([".env", ".env.local", "apps/web/.env.production", ".envrc"]);
+  });
+});
+
+describe("plan files", () => {
+  it("names one file per plan and records where it came from", () => {
+    const fileName = planFileName({
+      planId: "plan-7f3a9c21-0000",
+      createdAt: "2026-09-24T08:15:00.000Z",
+      threadTitle: "Checkout: API & web",
+    });
+    expect(fileName).toBe("2026-09-24-0815-checkout-api-web-plan7f3a.md");
+    const text = renderPlanFile({
+      planMarkdown: "# Plan\n\n1. Do it\n",
+      threadTitle: "Checkout",
+      repoName: null,
+      fileName,
+    });
+    expect(text).toContain("the folder session");
+    expect(text).toContain(`plans/${fileName}`);
+    expect(text.endsWith("1. Do it\n")).toBe(true);
   });
 });
