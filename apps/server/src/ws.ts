@@ -3081,6 +3081,12 @@ const makeWsRpcLayer = (
             folderService.restore(input).pipe(Effect.map((folder) => ({ folder }))),
             { "rpc.aggregate": "folder" },
           ),
+        [WS_METHODS.foldersOpenRoot]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersOpenRoot,
+            folderService.openRoot(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
         [WS_METHODS.foldersCopyEnvFiles]: (input) =>
           observeRpcEffect(
             WS_METHODS.foldersCopyEnvFiles,

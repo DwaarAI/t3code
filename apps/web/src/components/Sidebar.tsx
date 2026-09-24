@@ -82,10 +82,11 @@ import {
 import { useParams, useRouter } from "@tanstack/react-router";
 
 import { useRightPanelStore } from "../rightPanelStore";
-import { folderWorktreeKey, useFolderWorktreeKeys } from "../state/folders";
+import { isFolderThreadKey, useEnvironmentFolders, useFolderThreadKeys } from "../state/folders";
 import { useCopyProviderSession } from "../hooks/useCopyProviderSession";
 import { providerSessionRef } from "../state/providerSessionRef";
 import { useFolderHandoff } from "../hooks/useFolderHandoff";
+import { useStartReview } from "../hooks/useStartReview";
 import { SidebarFolders } from "./folders/SidebarFolders";
 import {
   isAtomCommandInterrupted,
@@ -2186,9 +2187,11 @@ export default function Sidebar() {
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const threads = useThreadShells();
   // Folder threads live under their folder, not in the flat list.
-  const folderWorktreeKeys = useFolderWorktreeKeys();
+  const folderThreadKeys = useFolderThreadKeys();
   const handOff = useFolderHandoff();
   const copyProviderSession = useCopyProviderSession();
+  const startReview = useStartReview();
+  const reviewEnvironments = useEnvironmentFolders();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -2585,8 +2588,7 @@ export default function Sidebar() {
     const visible = threads.filter(
       (thread) =>
         thread.archivedAt === null &&
-        (thread.worktreePath === null ||
-          !folderWorktreeKeys.has(folderWorktreeKey(thread.environmentId, thread.worktreePath))) &&
+        !isFolderThreadKey(folderThreadKeys, thread) &&
         (scopedProjectKeys === null ||
           scopedProjectKeys.has(`${thread.environmentId}:${thread.projectId}`)),
     );
@@ -2675,7 +2677,7 @@ export default function Sidebar() {
       snoozeNow: preciseNow,
     };
   }, [
-    folderWorktreeKeys,
+    folderThreadKeys,
     nowMinute,
     optimisticDrop,
     scopedProjectKeys,
@@ -2854,9 +2856,10 @@ export default function Sidebar() {
     [orderedThreads],
   );
   const activeFolderWorktree = useMemo(() => {
-    if (routeDraftThread?.worktreePath) {
+    if (routeDraftThread) {
       return {
         environmentId: routeDraftThread.environmentId,
+        projectId: routeDraftThread.projectId,
         worktreePath: routeDraftThread.worktreePath,
       };
     }
@@ -2868,8 +2871,12 @@ export default function Sidebar() {
             candidate.id === routeThreadRef.threadId,
         )
       : undefined;
-    return thread?.worktreePath
-      ? { environmentId: thread.environmentId, worktreePath: thread.worktreePath }
+    return thread
+      ? {
+          environmentId: thread.environmentId,
+          projectId: thread.projectId,
+          worktreePath: thread.worktreePath,
+        }
       : null;
   }, [routeDraftThread, routeThreadRef, threads]);
   // Handlers read these through refs: depending on per-update Map/Set
@@ -4124,11 +4131,10 @@ export default function Sidebar() {
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
               hasProviderSession: thread.session != null,
-              canHandoff:
-                thread.worktreePath !== null &&
-                folderWorktreeKeys.has(
-                  folderWorktreeKey(thread.environmentId, thread.worktreePath),
-                ),
+              canHandoff: isFolderThreadKey(folderThreadKeys, thread),
+              canReview: reviewEnvironments.some(
+                (entry) => entry.environmentId === thread.environmentId,
+              ),
               projectFilter: threadProjectGroup
                 ? {
                     label: threadProjectGroup.displayName,
@@ -4179,6 +4185,9 @@ export default function Sidebar() {
             return;
           case "handoff":
             await handOff(thread);
+            return;
+          case "review":
+            await startReview(thread);
             return;
           case "new-thread-on-branch": {
             // Explicit branch carry-over: reuse the thread's worktree when it
@@ -4347,7 +4356,9 @@ export default function Sidebar() {
       copyThreadIdToClipboard,
       deleteThread,
       copyProviderSession,
-      folderWorktreeKeys,
+      folderThreadKeys,
+      reviewEnvironments,
+      startReview,
       handOff,
       handleMultiSelectContextMenu,
       markThreadUnread,

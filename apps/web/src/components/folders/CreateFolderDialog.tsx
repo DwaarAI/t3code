@@ -94,16 +94,29 @@ function CreateFolderDialog(props: {
     props.initialEnvironmentId ?? environments[0]?.environmentId ?? null,
   );
   const allProjects = useProjects();
+  const rootProjectIds = useMemo(
+    () =>
+      new Set(
+        environments.flatMap((environment) =>
+          environment.folders.flatMap((folder) =>
+            folder.rootProjectId ? [folder.rootProjectId as string] : [],
+          ),
+        ),
+      ),
+    [environments],
+  );
   const projects = useMemo(
     () =>
       allProjects
         .filter(
           (project) =>
             project.environmentId === environmentId &&
+            // A folder's own session project is not a repository to add.
+            !rootProjectIds.has(project.id) &&
             !addTo?.members.some((member) => member.projectId === project.id),
         )
         .toSorted((a, b) => a.title.localeCompare(b.title)),
-    [addTo, allProjects, environmentId],
+    [addTo, allProjects, environmentId, rootProjectIds],
   );
   const [name, setName] = useState("");
   const [branch, setBranch] = useState("");

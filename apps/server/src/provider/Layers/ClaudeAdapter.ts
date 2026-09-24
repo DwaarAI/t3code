@@ -4914,7 +4914,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(input.cwd ? [input.cwd] : []),
         serverConfig.attachmentsDir,
         serverConfig.guidesDir,
-        ...(folderContext?.writableDirs ?? []),
+        ...(folderContext?.accessDirs ?? []),
       ];
       const queryOptions: ClaudeQueryOptions = {
         ...(input.cwd ? { cwd: input.cwd } : {}),

@@ -800,7 +800,7 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
                 additionalDirectories: [
                   serverConfig.attachmentsDir,
                   serverConfig.guidesDir,
-                  ...(resolveFolderSessionContext(cwd, serverConfig)?.writableDirs ?? []),
+                  ...(resolveFolderSessionContext(cwd, serverConfig)?.accessDirs ?? []),
                 ],
                 ...(Option.isSome(cursor) ? { resumeSessionId: cursor.value.sessionId } : {}),
                 mcpServers: mcp
@@ -827,7 +827,7 @@ export const makeAntigravityAdapter = Effect.fn("makeAntigravityAdapter")(functi
                 cwd,
                 serverConfig.attachmentsDir,
                 serverConfig.guidesDir,
-                ...(resolveFolderSessionContext(cwd, serverConfig)?.writableDirs ?? []),
+                ...(resolveFolderSessionContext(cwd, serverConfig)?.accessDirs ?? []),
               ];
               yield* runtime.handleReadTextFile((request) =>
                 readClientTextFile({ fileSystem, path, allowedRoots, request }),

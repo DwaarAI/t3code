@@ -9,6 +9,7 @@ import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled"
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
   | "handoff"
+  | "review"
   | "filter-by-project"
   | "project-settings"
   | "pin"
@@ -43,6 +44,8 @@ export interface ThreadActionMenuState {
   } | null;
   /** The thread has run a provider session, so its native session id may exist. */
   readonly hasProviderSession?: boolean;
+  /** The environment has a review guide, so a Codex review session can start. */
+  readonly canReview?: boolean;
   /** The thread runs in a folder worktree, so it can hand off to a new thread. */
   readonly canHandoff?: boolean;
   readonly isPinned: boolean;
@@ -75,6 +78,15 @@ export function buildThreadActionMenuItems(
           {
             id: "new-thread-on-branch" as const,
             label: `New thread on ${state.branch}`,
+            icon: "message-square-plus",
+          },
+        ]
+      : []),
+    ...(state.canReview
+      ? [
+          {
+            id: "review" as const,
+            label: "Review in a new Codex session",
             icon: "message-square-plus",
           },
         ]

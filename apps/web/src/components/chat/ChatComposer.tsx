@@ -184,7 +184,7 @@ import {
   type TerminalContextSelection,
 } from "../../lib/terminalContext";
 import { useComposerPathSearch } from "../../lib/composerPathSearchState";
-import { useFolderMemberForWorktree, useFoldersForEnvironment } from "../../state/folders";
+import { useFolderForCwd, useFoldersForEnvironment } from "../../state/folders";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
 import {
   getRestingComposerImagePreviewCounts,
@@ -2260,7 +2260,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const settledPullRequestTextQuery =
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
-  const folderMatch = useFolderMemberForWorktree(environmentId, gitCwd);
+  const folderMatch = useFolderForCwd(environmentId, gitCwd);
   const environmentFolders = useFoldersForEnvironment(environmentId);
   const composerExtraRoots = useMemo(
     () => ({

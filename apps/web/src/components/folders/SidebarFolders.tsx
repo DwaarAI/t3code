@@ -13,12 +13,13 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitBranchIcon,
+  LayersIcon,
   PlusIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { memo, useCallback, useMemo } from "react";
 
-import { useStartFolderThread } from "../../hooks/useStartFolderThread";
+import { useStartFolderSession, useStartFolderThread } from "../../hooks/useStartFolderThread";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
@@ -76,6 +77,24 @@ function isDirtyWorktreeFailure(result: AtomCommandResult<unknown, unknown>): bo
   );
 }
 
+/** The thread or draft on screen, to highlight its worktree or folder session. */
+interface ActiveFolderThread {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: string;
+  readonly worktreePath: string | null;
+}
+
+/** Threads grouped by where they run: a member worktree, or a folder session's project. */
+function folderThreadGroupKey(thread: {
+  readonly environmentId: EnvironmentId;
+  readonly projectId: string;
+  readonly worktreePath: string | null;
+}): string {
+  return thread.worktreePath === null
+    ? `${thread.environmentId}\u0000project:${thread.projectId}`
+    : `${thread.environmentId}\u0000${thread.worktreePath}`;
+}
+
 interface FolderEntry {
   readonly environmentId: EnvironmentId;
   readonly folder: Folder;
@@ -88,7 +107,7 @@ interface FolderEntry {
  */
 export const SidebarFolders = memo(function SidebarFolders(props: {
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
-  readonly activeWorktree: { environmentId: EnvironmentId; worktreePath: string } | null;
+  readonly activeWorktree: ActiveFolderThread | null;
 }) {
   const environments = useEnvironmentFolders();
   const [collapsed, setCollapsed] = useLocalStorage(
@@ -120,8 +139,8 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
   const threadsByWorktree = useMemo(() => {
     const byWorktree = new Map<string, EnvironmentThreadShell[]>();
     for (const thread of props.threads) {
-      if (thread.worktreePath === null || thread.archivedAt !== null) continue;
-      const key = `${thread.environmentId}\u0000${thread.worktreePath}`;
+      if (thread.archivedAt !== null) continue;
+      const key = folderThreadGroupKey(thread);
       const list = byWorktree.get(key);
       if (list) list.push(thread);
       else byWorktree.set(key, [thread]);
@@ -209,7 +228,7 @@ function FolderGroup(props: {
   expanded: boolean;
   onToggle: () => void;
   threadsByWorktree: ReadonlyMap<string, ReadonlyArray<EnvironmentThreadShell>>;
-  activeWorktree: { environmentId: EnvironmentId; worktreePath: string } | null;
+  activeWorktree: ActiveFolderThread | null;
 }) {
   const { environmentId, folder } = props;
   const archiveFolder = useAtomCommand(folderEnvironment.archive, { reportFailure: false });
@@ -218,6 +237,7 @@ function FolderGroup(props: {
     reportFailure: false,
   });
   const deleteFolder = useAtomCommand(folderEnvironment.delete, { reportFailure: false });
+  const startFolderSession = useStartFolderSession();
   const issue = folder.issue;
   const openIssue = () => {
     if (!issue) return;
@@ -330,6 +350,9 @@ function FolderGroup(props: {
                     <MenuSeparator />
                   </>
                 ) : null}
+                <MenuItem onClick={() => void startFolderSession(environmentId, folder)}>
+                  New folder session
+                </MenuItem>
                 <MenuItem onClick={() => openAddRepositoryDialog(environmentId, folder)}>
                   Add repository…
                 </MenuItem>
@@ -346,13 +369,41 @@ function FolderGroup(props: {
       </div>
       {props.expanded ? (
         <ul className="ml-4 flex flex-col gap-0.5 border-sidebar-border border-l pl-1.5">
+          {isArchived ? null : (
+            <FolderSessionRow
+              environmentId={environmentId}
+              folder={folder}
+              threads={
+                folder.rootProjectId
+                  ? props.threadsByWorktree.get(
+                      folderThreadGroupKey({
+                        environmentId,
+                        projectId: folder.rootProjectId,
+                        worktreePath: null,
+                      }),
+                    )
+                  : undefined
+              }
+              isActive={
+                props.activeWorktree?.environmentId === environmentId &&
+                props.activeWorktree.worktreePath === null &&
+                props.activeWorktree.projectId === folder.rootProjectId
+              }
+            />
+          )}
           {folder.members.map((member) => (
             <FolderMemberRow
               key={member.projectId}
               environmentId={environmentId}
               folder={folder}
               member={member}
-              threads={props.threadsByWorktree.get(`${environmentId}\u0000${member.worktreePath}`)}
+              threads={props.threadsByWorktree.get(
+                folderThreadGroupKey({
+                  environmentId,
+                  projectId: member.projectId,
+                  worktreePath: member.worktreePath,
+                }),
+              )}
               isActive={
                 props.activeWorktree?.environmentId === environmentId &&
                 props.activeWorktree.worktreePath === member.worktreePath
@@ -362,6 +413,79 @@ function FolderGroup(props: {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The folder session: threads whose working directory is the folder itself,
+ * so they see every repository and plan across them.
+ */
+function FolderSessionRow(props: {
+  environmentId: EnvironmentId;
+  folder: Folder;
+  threads: ReadonlyArray<EnvironmentThreadShell> | undefined;
+  isActive: boolean;
+}) {
+  const { environmentId, folder } = props;
+  const router = useRouter();
+  const startFolderSession = useStartFolderSession();
+  const threads = props.threads ?? [];
+  const running = threads.some((thread) => thread.session?.status === "running");
+  const newSession = () => void startFolderSession(environmentId, folder);
+  const open = () => {
+    const latest = threads[0];
+    if (!latest) {
+      newSession();
+      return;
+    }
+    void router.navigate({
+      to: "/$environmentId/$threadId",
+      params: buildThreadRouteParams(scopeThreadRef(environmentId, latest.id)),
+    });
+  };
+  return (
+    <li
+      className="group/member flex h-7 items-center gap-1 rounded-lg pr-1 hover:bg-sidebar-row-hover data-[active=true]:bg-sidebar-row-selected"
+      data-active={props.isActive}
+    >
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              onClick={open}
+              className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-1.5 text-left text-sidebar-foreground text-sm"
+            />
+          }
+        >
+          <LayersIcon aria-hidden className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
+          <span className="truncate">All repositories</span>
+          {running ? (
+            <span
+              aria-label="Agent running"
+              className="size-1.5 shrink-0 rounded-full bg-primary"
+            />
+          ) : null}
+          {threads.length > 0 ? (
+            <span className="ml-auto shrink-0 text-sidebar-muted-foreground/60 text-xs tabular-nums">
+              {threads.length}
+            </span>
+          ) : null}
+        </TooltipTrigger>
+        <TooltipPopup side="right">
+          <span className="block">Folder sessions work across every repository.</span>
+          <span className="block font-mono text-muted-foreground">{folder.path}</span>
+        </TooltipPopup>
+      </Tooltip>
+      <Button
+        size="icon-micro"
+        variant="ghost"
+        aria-label={`New folder session in ${folder.name}`}
+        onClick={newSession}
+      >
+        <PlusIcon />
+      </Button>
+    </li>
   );
 }
 

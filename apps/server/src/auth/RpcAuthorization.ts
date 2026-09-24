@@ -122,6 +122,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.foldersSetIssueStatus]: AuthOrchestrationOperateScope,
   [WS_METHODS.foldersDelete]: AuthOrchestrationOperateScope,
   [WS_METHODS.foldersCopyEnvFiles]: AuthOrchestrationOperateScope,
+  [WS_METHODS.foldersOpenRoot]: AuthOrchestrationOperateScope,
   [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.filesystemBrowse]: AuthOrchestrationReadScope,
   [WS_METHODS.agentSessionsScan]: AuthOrchestrationReadScope,

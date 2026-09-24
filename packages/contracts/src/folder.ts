@@ -75,6 +75,11 @@ export const FolderManifest = Schema.Struct({
   issue: Schema.optional(FolderIssue),
   /** Suggested first message for a worktree's first thread. */
   initialPrompt: Schema.optional(Schema.String),
+  /**
+   * The project rooted at the folder directory, for folder sessions that span
+   * every repository. Created the first time one is opened.
+   */
+  rootProjectId: Schema.optional(ProjectId),
 });
 export type FolderManifest = typeof FolderManifest.Type;
 

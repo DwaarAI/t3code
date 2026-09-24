@@ -36,10 +36,11 @@ import {
 } from "../logicalProject";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { useUiStateStore } from "../uiStateStore";
-import { isFolderWorktree, useEnvironmentFolders } from "../state/folders";
+import { isFolderThread, useEnvironmentFolders } from "../state/folders";
 import { useCopyToClipboard } from "./useCopyToClipboard";
 import { useCopyProviderSession } from "./useCopyProviderSession";
 import { useFolderHandoff } from "./useFolderHandoff";
+import { useStartReview } from "./useStartReview";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
@@ -100,6 +101,7 @@ export function useThreadActionMenu(input: {
   const handleNewThread = useNewThreadHandler();
   const handOff = useFolderHandoff();
   const copyProviderSession = useCopyProviderSession();
+  const startReview = useStartReview();
   const environmentFolders = useEnvironmentFolders();
   const markThreadUnread = useUiStateStore((s) => s.markThreadUnread);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
@@ -146,10 +148,9 @@ export function useThreadActionMenu(input: {
         const snoozePresets = resolveSnoozePresets(now, timestampFormat);
         const items = buildThreadActionMenuItems({
           branch: thread.branch ?? null,
-          canHandoff: isFolderWorktree(
-            environmentFolders,
-            thread.environmentId,
-            thread.worktreePath,
+          canHandoff: isFolderThread(environmentFolders, thread.environmentId, thread),
+          canReview: environmentFolders.some(
+            (entry) => entry.environmentId === thread.environmentId,
           ),
           hasProviderSession: thread.session != null,
           // The chat header has no project-scoped thread list behind the
@@ -207,6 +208,9 @@ export function useThreadActionMenu(input: {
           }
           case "handoff":
             await handOff(thread);
+            return;
+          case "review":
+            await startReview(thread);
             return;
           case "new-thread-on-branch": {
             // Explicit branch carry-over: reuse the thread's worktree when it
@@ -350,6 +354,7 @@ export function useThreadActionMenu(input: {
       deleteThread,
       copyProviderSession,
       environmentFolders,
+      startReview,
       handOff,
       handleNewThread,
       logicalProjectKeyByPhysicalKey,

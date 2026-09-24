@@ -36,6 +36,26 @@ threads don't appear in the main thread list.
 Threads in a worktree share its files. Run edits that could overlap one at a time, and use
 parallel threads for testing, review, and questions.
 
+## Work across repositories
+
+**All repositories**, at the top of each folder, holds its folder sessions. A folder session's
+working directory is the folder itself, so the agent sees every repository side by side and can
+plan or change work that spans them; tell it which repository each change belongs in. Choose
+**All repositories** to open the latest folder session, **+** beside it to start one, or **New
+folder session** from the folder's menu. Folder sessions have their own tabs, and the Android
+and iOS apps list them under a project named after the folder.
+
+Agents in a repository's thread can also read the folder's other repositories, and are asked
+to change only their own unless you say otherwise.
+
+## Plan with plan mode
+
+Switch the composer to plan mode, in a folder session to plan across repositories or in a
+repository's thread to plan within it. When the agent finishes a plan, T3 Code saves it to
+`.context/plans/` and makes it the folder's `.context/plan.md`, so every thread in the folder,
+including ones you start later, works from the same plan. Marking an older plan implemented
+does not replace a newer `plan.md`.
+
 ## Share context between threads
 
 Every folder has a `.context` directory next to its worktrees:
@@ -43,13 +63,16 @@ Every folder has a `.context` directory next to its worktrees:
 | Path        | Use                                            |
 | ----------- | ---------------------------------------------- |
 | `plan.md`   | The current plan.                              |
+| `plans/`    | Every plan proposed in plan mode.              |
 | `todos.md`  | Open and finished tasks.                       |
 | `handoffs/` | Notes written when work moves to a new thread. |
 | `reviews/`  | Review findings.                               |
 
-Agents in a folder are told where `.context` is and are asked to read it before starting and
-keep `plan.md` and `todos.md` current. Nothing in `.context` is committed to your repositories.
-To attach a file from it, type `@` in the composer and search for its name.
+Each repository worktree also links it as `.context`, so the notes are reachable from inside the
+repository. Git ignores the link through the repository's local exclude file, so it never shows up
+as a change. Agents in a folder are told where `.context` is and are asked to read it before
+starting and keep `plan.md` and `todos.md` current. Nothing in `.context` is committed to your
+repositories. To attach a file from it, type `@` in the composer and search for its name.
 
 ## Hand off to a new thread
 
@@ -59,12 +82,21 @@ handoff note to `.context/handoffs/` with the latest plan and a digest of the co
 opens a new thread in the same worktree with the note attached. Pick any provider, for example
 Codex to review work Claude implemented, and add your instruction.
 
+## Review with Codex
+
+Choose **Review** in the tab bar, or **Review in a new Codex session** from any thread's menu. T3
+Code opens a new thread in the same worktree or folder session, switches it to Codex, and fills
+in a review request against the branch's base with the `review.md` guide attached. Send it as is
+or add what to focus on. The reviewer lists its findings, saves them to `.context/reviews/` in a
+folder, and posts them to the branch's pull request only when you ask. If Codex is not set up on
+that machine, the draft keeps the current provider.
+
 ## Reusable guides
 
 Markdown files in the `guides` directory of your T3 Code home (`~/.t3/guides` by default) can be
 attached to any thread. Type `@` in the composer and search for the file name. T3 Code creates
-`code-review.md` there the first time folders are used; edit it or add your own, such as review
-checklists or team conventions.
+`review.md`, the guide Review uses, when it is missing; edit it to change how reviews work, or add
+your own guides, such as team conventions.
 
 ## Work from GitHub issues
 

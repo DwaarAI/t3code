@@ -53,6 +53,7 @@ export function createFolderEnvironmentAtoms<R, E>(
     setIssueStatus: mutation(WS_METHODS.foldersSetIssueStatus, "set-issue-status"),
     delete: mutation(WS_METHODS.foldersDelete, "delete"),
     copyEnvFiles: mutation(WS_METHODS.foldersCopyEnvFiles, "copy-env-files"),
+    openRoot: mutation(WS_METHODS.foldersOpenRoot, "open-root"),
     writeHandoff: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:folders:write-handoff",
       tag: WS_METHODS.foldersWriteHandoff,
@@ -69,7 +70,8 @@ type MutationTag =
   | typeof WS_METHODS.foldersRestore
   | typeof WS_METHODS.foldersSetIssueStatus
   | typeof WS_METHODS.foldersDelete
-  | typeof WS_METHODS.foldersCopyEnvFiles;
+  | typeof WS_METHODS.foldersCopyEnvFiles
+  | typeof WS_METHODS.foldersOpenRoot;
 
 export interface FolderWorktreeMatch {
   readonly folder: Folder;
@@ -87,4 +89,33 @@ export function findFolderMemberForWorktree(
     if (member) return { folder, member };
   }
   return null;
+}
+
+/** A thread's folder; `member` is null for a folder session, which spans every repository. */
+export interface FolderThreadMatch {
+  readonly folder: Folder;
+  readonly member: FolderMember | null;
+}
+
+/**
+ * The folder a thread belongs to: by the member worktree it runs in, or, for a
+ * folder session, by running in the folder's own project without a worktree.
+ */
+export function findFolderForThread(
+  folders: ReadonlyArray<Folder>,
+  thread: { readonly projectId: string; readonly worktreePath: string | null | undefined },
+): FolderThreadMatch | null {
+  if (thread.worktreePath) return findFolderMemberForWorktree(folders, thread.worktreePath);
+  const folder = folders.find((candidate) => candidate.rootProjectId === thread.projectId);
+  return folder ? { folder, member: null } : null;
+}
+
+/** The folder whose member worktree or own directory is `cwd`. */
+export function findFolderForCwd(
+  folders: ReadonlyArray<Folder>,
+  cwd: string | null | undefined,
+): FolderThreadMatch | null {
+  if (!cwd) return null;
+  const folder = folders.find((candidate) => candidate.path === cwd);
+  return folder ? { folder, member: null } : findFolderMemberForWorktree(folders, cwd);
 }
