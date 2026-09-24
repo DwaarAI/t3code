@@ -68,6 +68,7 @@ import {
   AssetWorkspaceContextResolutionError,
   RpcClientId,
   EnvironmentAuthorizationError,
+  ProviderSessionRefError,
   ThreadId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -111,6 +112,7 @@ import {
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "./provider/Services/ProviderSessionDirectory.ts";
+import { nativeProviderSessionId } from "./provider/nativeSessionId.ts";
 import * as ProviderMaintenanceRunner from "./provider/providerMaintenanceRunner.ts";
 import { ProviderAuthService } from "./provider/Services/ProviderAuthService.ts";
 import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";
@@ -3016,6 +3018,29 @@ const makeWsRpcLayer = (
               "rpc.aggregate": "source-control",
             },
           ),
+        [WS_METHODS.providerGetSessionRef]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.providerGetSessionRef,
+            providerSessionDirectory.getBinding(input.threadId).pipe(
+              Effect.map(
+                Option.match({
+                  onNone: () => ({ provider: null, sessionId: null }),
+                  onSome: (binding) => ({
+                    provider: binding.provider,
+                    sessionId: nativeProviderSessionId(binding.provider, binding.resumeCursor),
+                  }),
+                }),
+              ),
+              Effect.mapError(
+                (cause) =>
+                  new ProviderSessionRefError({
+                    detail: "Could not read the provider session for this thread.",
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "provider" },
+          ),
         [WS_METHODS.foldersList]: () =>
           observeRpcEffect(WS_METHODS.foldersList, folderService.list(), {
             "rpc.aggregate": "folder",
@@ -3054,6 +3079,12 @@ const makeWsRpcLayer = (
           observeRpcEffect(
             WS_METHODS.foldersRestore,
             folderService.restore(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersCopyEnvFiles]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersCopyEnvFiles,
+            folderService.copyEnvFiles(input).pipe(Effect.map((folder) => ({ folder }))),
             { "rpc.aggregate": "folder" },
           ),
         [WS_METHODS.foldersDelete]: (input) =>

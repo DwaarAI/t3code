@@ -4,6 +4,7 @@ import type { OrchestrationThread } from "@t3tools/contracts";
 
 import {
   buildHandoffMarkdown,
+  envFilesToCopy,
   resolveFolderScope,
   resolveFolderSessionContext,
   slugifyFolderName,
@@ -107,5 +108,23 @@ describe("buildHandoffMarkdown", () => {
     expect(note).toContain("request 39\n");
     expect(note).toMatch(/_\d+ earlier exchanges omitted\._/);
     expect(note.length).toBeLessThan(100_000);
+  });
+});
+
+describe("envFilesToCopy", () => {
+  it("keeps .env files and skips collapsed directories", () => {
+    expect(
+      envFilesToCopy([
+        ".env",
+        ".env.local",
+        "apps/web/.env.production",
+        ".envrc",
+        "node_modules/",
+        ".env-dir/",
+        "notes.txt",
+        "../.env",
+        "",
+      ]),
+    ).toEqual([".env", ".env.local", "apps/web/.env.production", ".envrc"]);
   });
 });

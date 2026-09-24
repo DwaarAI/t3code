@@ -18,6 +18,7 @@ import {
   type FolderMember,
   type FolderMemberInput,
   type FolderMemberRefInput,
+  type FolderMemberSetup,
   type FolderDeleteResult,
   type FolderRefInput,
   type FolderSetIssueStatusInput,
@@ -48,6 +49,7 @@ import {
   FOLDER_MANIFEST_FILE,
   SEED_GUIDES,
   buildHandoffMarkdown,
+  envFilesToCopy,
   folderContextScaffold,
   handoffFileName,
   resolveFolderScope,
@@ -75,6 +77,8 @@ export class FolderService extends Context.Service<
     ) => Effect.Effect<Folder, FolderError>;
     /** Removes the worktrees and the folder directory, including `.context`. */
     readonly delete: (input: FolderRefInput) => Effect.Effect<FolderDeleteResult, FolderError>;
+    /** Copies the project's `.env*` files into a member worktree again, replacing older copies. */
+    readonly copyEnvFiles: (input: FolderMemberRefInput) => Effect.Effect<Folder, FolderError>;
     readonly writeHandoff: (
       input: FolderHandoffInput,
     ) => Effect.Effect<FolderHandoffResult, FolderError>;
@@ -163,7 +167,50 @@ export const make = Effect.gen(function* () {
   const gitFailed = (error: { readonly message: string }) =>
     new FolderError({ reason: "git_failed", detail: error.message, cause: error });
 
-  /** Check out `branch` at `worktreePath`, creating the branch from base when missing. */
+  /**
+   * The freshest commit to branch from: `origin/<base>` after a fetch, so a
+   * new worktree starts from what is on the remote even when the project's
+   * checkout is behind. The checkout itself is left alone. Falls back to the
+   * local branch when there is no origin, the fetch fails, or origin lacks it.
+   */
+  const resolveBaseRef = (projectRoot: string, baseBranch: string) =>
+    Effect.gen(function* () {
+      const local = { ref: baseBranch, label: baseBranch };
+      const hasOrigin = yield* gitWorkflow.remoteExists({ cwd: projectRoot, remoteName: "origin" });
+      if (!hasOrigin) return local;
+      yield* gitWorkflow.fetchRemote({
+        cwd: projectRoot,
+        remoteName: "origin",
+        refName: baseBranch,
+      });
+      const onOrigin = yield* gitWorkflow.remoteBranchExists({
+        cwd: projectRoot,
+        remoteName: "origin",
+        refName: baseBranch,
+      });
+      if (!onOrigin) return local;
+      const remote = yield* gitWorkflow.resolveRemoteTrackingCommit({
+        cwd: projectRoot,
+        refName: baseBranch,
+        fallbackRemoteName: "origin",
+      });
+      return {
+        ref: remote.commitSha,
+        label: `${remote.remoteRefName}@${remote.commitSha.slice(0, 7)}`,
+      };
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `Could not fetch ${baseBranch} for ${projectRoot}; branching from the local branch.`,
+          error,
+        ).pipe(Effect.as({ ref: baseBranch, label: baseBranch })),
+      ),
+    );
+
+  /**
+   * Check out `branch` at `worktreePath`, creating the branch from the latest
+   * base when missing. Returns what a new branch started from, or null.
+   */
   const checkOutWorktree = (input: {
     readonly projectRoot: string;
     readonly branch: string;
@@ -175,18 +222,92 @@ export const make = Effect.gen(function* () {
         cwd: input.projectRoot,
         refName: `refs/heads/${input.branch}`,
       });
-      yield* gitWorkflow.createWorktree(
-        branchExists
-          ? { cwd: input.projectRoot, refName: input.branch, path: input.worktreePath }
-          : {
-              cwd: input.projectRoot,
-              refName: input.baseBranch,
-              newRefName: input.branch,
-              baseRefName: input.baseBranch,
-              path: input.worktreePath,
-            },
-      );
+      if (branchExists) {
+        yield* gitWorkflow.createWorktree({
+          cwd: input.projectRoot,
+          refName: input.branch,
+          path: input.worktreePath,
+        });
+        return null;
+      }
+      const base = yield* resolveBaseRef(input.projectRoot, input.baseBranch);
+      yield* gitWorkflow.createWorktree({
+        cwd: input.projectRoot,
+        refName: base.ref,
+        newRefName: input.branch,
+        baseRefName: input.baseBranch,
+        path: input.worktreePath,
+      });
+      return base.label;
     }).pipe(Effect.mapError(gitFailed));
+
+  /**
+   * Gitignored `.env*` files never reach a new worktree, so copy them from the
+   * project's checkout. Best effort: a missing env file must not block the
+   * worktree the user asked for.
+   */
+  const copyProjectEnvFiles = (input: {
+    readonly projectRoot: string;
+    readonly worktreePath: string;
+    readonly overwrite: boolean;
+  }) =>
+    Effect.gen(function* () {
+      const list = (operation: string, args: ReadonlyArray<string>) =>
+        gitDriver
+          .execute({ operation, cwd: input.projectRoot, args, maxOutputBytes: 8_000_000 })
+          .pipe(Effect.map((result) => result.stdout.split("\0")));
+      // Ignored files, with wholly ignored directories such as node_modules
+      // collapsed so git never walks them; then untracked files git does not
+      // ignore, which the collapsed listing can hide inside a new directory.
+      const ignored = yield* list("FolderService.listIgnoredEnvFiles", [
+        "ls-files",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory",
+        "-z",
+      ]);
+      const untracked = yield* list("FolderService.listUntrackedEnvFiles", [
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "--",
+        ":(glob)**/.env*",
+      ]);
+      const copied: string[] = [];
+      for (const relative of new Set(envFilesToCopy([...ignored, ...untracked]))) {
+        const target = path.join(input.worktreePath, relative);
+        if (!input.overwrite && (yield* fs.exists(target))) continue;
+        yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+        yield* fs.copyFile(path.join(input.projectRoot, relative), target);
+        copied.push(relative);
+      }
+      return copied;
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(`Could not copy .env files into ${input.worktreePath}`, error).pipe(
+          Effect.as([] as string[]),
+        ),
+      ),
+    );
+
+  /** Worktree plus the default setup every new worktree gets. */
+  const prepareWorktree = (input: {
+    readonly projectRoot: string;
+    readonly branch: string;
+    readonly baseBranch: string;
+    readonly worktreePath: string;
+  }) =>
+    Effect.gen(function* () {
+      const baseRef = yield* checkOutWorktree(input);
+      const envFiles = yield* copyProjectEnvFiles({
+        projectRoot: input.projectRoot,
+        worktreePath: input.worktreePath,
+        overwrite: false,
+      });
+      return { baseRef, envFiles, at: yield* nowIso } satisfies FolderMemberSetup;
+    });
 
   const createMember = (input: {
     readonly slug: string;
@@ -198,7 +319,7 @@ export const make = Effect.gen(function* () {
       const projectRoot = yield* resolveProjectRoot(input.member.projectId);
       const repoName = uniqueRepoName(path, projectRoot, input.takenRepoNames);
       const worktreePath = path.join(folderDirFor(input.slug), repoName);
-      yield* checkOutWorktree({
+      const setup = yield* prepareWorktree({
         projectRoot,
         branch: input.branch,
         baseBranch: input.member.baseBranch,
@@ -211,6 +332,7 @@ export const make = Effect.gen(function* () {
         baseBranch: input.member.baseBranch,
         worktreePath,
         archivedAt: null,
+        setup,
       } satisfies FolderMember;
     });
 
@@ -316,13 +438,13 @@ export const make = Effect.gen(function* () {
         ),
       );
       if (projectRoot === null) return member;
-      yield* checkOutWorktree({
+      const setup = yield* prepareWorktree({
         projectRoot,
         branch: member.branch,
         baseBranch: member.baseBranch,
         worktreePath: member.worktreePath,
       });
-      return { ...member, archivedAt: null };
+      return { ...member, archivedAt: null, setup };
     });
 
   const list: FolderService["Service"]["list"] = () =>
@@ -557,6 +679,28 @@ export const make = Effect.gen(function* () {
       }),
     );
 
+  const copyEnvFiles: FolderService["Service"]["copyEnvFiles"] = (input) =>
+    mutation.withPermits(1)(
+      Effect.gen(function* () {
+        const manifest = yield* readManifest(input.slug);
+        const member = yield* findMember(manifest, input.projectId);
+        if (member.archivedAt !== null) {
+          return yield* fail("invalid_input", `${member.repoName} is archived; restore it first.`);
+        }
+        const envFiles = yield* copyProjectEnvFiles({
+          projectRoot: yield* resolveProjectRoot(member.projectId),
+          worktreePath: member.worktreePath,
+          overwrite: true,
+        });
+        return yield* writeManifest(
+          replaceMember(manifest, {
+            ...member,
+            setup: { baseRef: member.setup?.baseRef ?? null, envFiles, at: yield* nowIso },
+          }),
+        );
+      }),
+    );
+
   const deleteFolder: FolderService["Service"]["delete"] = (input) =>
     mutation.withPermits(1)(
       Effect.gen(function* () {
@@ -624,6 +768,7 @@ export const make = Effect.gen(function* () {
     restore,
     setIssueStatus,
     delete: deleteFolder,
+    copyEnvFiles,
     writeHandoff,
   });
 });

@@ -131,6 +131,11 @@ and copying a thread reference. A copied reference uses the thread's pull reques
 link when available, otherwise its thread ID. See [keybindings](./keybindings.md)
 for custom configuration.
 
+On web and desktop, a thread's hover card shows the provider's own session ID once it has one.
+**Copy → Session ID** in the thread's menu copies it, and **Copy → Resume command** copies a
+command such as `cd <worktree> && claude --resume <id>` for continuing a Claude Code or Codex
+session in a terminal on the machine running T3 Code.
+
 ## Inspect agent work
 
 On web and desktop, use **Agents** to follow work delegated to subagents.

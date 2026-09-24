@@ -160,3 +160,23 @@ export const ProviderEvent = Schema.Struct({
   payload: Schema.optional(Schema.Unknown),
 });
 export type ProviderEvent = typeof ProviderEvent.Type;
+
+export const ProviderSessionRefInput = Schema.Struct({ threadId: ThreadId });
+export type ProviderSessionRefInput = typeof ProviderSessionRefInput.Type;
+
+/** The provider's own id for a thread's session, as its CLI knows it. */
+export const ProviderSessionRef = Schema.Struct({
+  provider: Schema.NullOr(ProviderDriverKind),
+  /** `claude --resume <id>`, `codex resume <id>`; null before the provider reported one. */
+  sessionId: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type ProviderSessionRef = typeof ProviderSessionRef.Type;
+
+export class ProviderSessionRefError extends Schema.TaggedError<ProviderSessionRefError>()(
+  "ProviderSessionRefError",
+  { detail: Schema.String, cause: Schema.optional(Schema.Defect()) },
+) {
+  override get message(): string {
+    return this.detail;
+  }
+}

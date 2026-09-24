@@ -20,6 +20,16 @@ export const FolderSlug = TrimmedNonEmptyString.check(
 );
 export type FolderSlug = typeof FolderSlug.Type;
 
+/** What happened when a member's worktree was prepared. */
+export const FolderMemberSetup = Schema.Struct({
+  /** What a new branch started from, such as `origin/main@1a2b3c4`; null for an existing branch. */
+  baseRef: Schema.NullOr(Schema.String),
+  /** Gitignored `.env*` files copied from the project's checkout, relative to its root. */
+  envFiles: Schema.Array(Schema.String),
+  at: IsoDateTime,
+});
+export type FolderMemberSetup = typeof FolderMemberSetup.Type;
+
 export const FolderMember = Schema.Struct({
   projectId: ProjectId,
   /** Directory name of the worktree inside the folder. Unique per folder. */
@@ -29,6 +39,7 @@ export const FolderMember = Schema.Struct({
   worktreePath: TrimmedNonEmptyString,
   /** Set while the worktree is removed from disk; its branch is kept. */
   archivedAt: Schema.NullOr(IsoDateTime),
+  setup: Schema.optional(FolderMemberSetup),
 });
 export type FolderMember = typeof FolderMember.Type;
 

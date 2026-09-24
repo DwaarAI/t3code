@@ -114,6 +114,9 @@ import {
   OrchestrationGetWorkflowScriptError,
 } from "./orchestration.ts";
 import {
+  ProviderSessionRef,
+  ProviderSessionRefError,
+  ProviderSessionRefInput,
   ProviderUploadFeedbackError,
   ProviderUploadFeedbackInput,
   ProviderUploadFeedbackResult,
@@ -308,6 +311,7 @@ export const WS_METHODS = {
   foldersWriteHandoff: "folders.writeHandoff",
   foldersSetIssueStatus: "folders.setIssueStatus",
   foldersDelete: "folders.delete",
+  foldersCopyEnvFiles: "folders.copyEnvFiles",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -324,6 +328,7 @@ export const WS_METHODS = {
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
+  providerGetSessionRef: "provider.getSessionRef",
   providerAuthComplete: "provider.auth.complete",
   providerAuthCancel: "provider.auth.cancel",
   providerAuthLogout: "provider.auth.logout",
@@ -516,6 +521,12 @@ const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
 });
 
 const ProviderSetupRpcError = Schema.Union([ProviderSetupError, EnvironmentAuthorizationError]);
+
+const WsProviderGetSessionRefRpc = Rpc.make(WS_METHODS.providerGetSessionRef, {
+  payload: ProviderSessionRefInput,
+  success: ProviderSessionRef,
+  error: Schema.Union([ProviderSessionRefError, EnvironmentAuthorizationError]),
+});
 
 const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeResetCredit, {
   payload: ProviderConsumeResetCreditInput,
@@ -1015,6 +1026,12 @@ const WsFoldersRestoreRpc = Rpc.make(WS_METHODS.foldersRestore, {
   error: FolderRpcError,
 });
 
+const WsFoldersCopyEnvFilesRpc = Rpc.make(WS_METHODS.foldersCopyEnvFiles, {
+  payload: FolderMemberRefInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
 const WsFoldersDeleteRpc = Rpc.make(WS_METHODS.foldersDelete, {
   payload: FolderRefInput,
   success: FolderDeleteResult,
@@ -1475,6 +1492,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
+  WsProviderGetSessionRefRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
   WsProviderAuthCancelRpc,
@@ -1556,6 +1574,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsFoldersWriteHandoffRpc,
   WsFoldersSetIssueStatusRpc,
   WsFoldersDeleteRpc,
+  WsFoldersCopyEnvFilesRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,

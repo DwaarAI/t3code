@@ -138,4 +138,63 @@ describe("FolderService with git", () => {
       }).pipe(Effect.provide(makeLayer({ [API]: api, [WEB]: web })));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+  it.effect("branches new worktrees from the latest origin and copies ignored .env files", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const api = yield* makeRepo("api");
+      // Only the root .env and apps/web/.env.local are ignored; packages/new is not.
+      yield* fs.writeFileString(
+        path.join(api, ".gitignore"),
+        "/.env\napps/web/.env.local\nnode_modules/\n",
+      );
+      yield* git(api, "add", ".gitignore");
+      yield* git(api, "commit", "-m", "ignore env");
+
+      // origin/main moves ahead of the local main the project is checked out on.
+      const remote = `${api}-origin.git`;
+      yield* git(api, "clone", "--bare", api, remote);
+      yield* git(api, "remote", "add", "origin", remote);
+      const other = `${api}-other`;
+      yield* git(api, "clone", remote, other);
+      yield* fs.writeFileString(path.join(other, "NEW.md"), "from origin\n");
+      yield* git(other, "add", "NEW.md");
+      yield* git(other, "commit", "-m", "remote only");
+      yield* git(other, "push", "origin", "HEAD:main");
+      const originHead = yield* gitOutput(other, "rev-parse", "HEAD");
+
+      yield* fs.writeFileString(path.join(api, ".env"), "SECRET=1\n");
+      yield* fs.makeDirectory(path.join(api, "apps", "web"), { recursive: true });
+      yield* fs.writeFileString(path.join(api, "apps", "web", ".env.local"), "LOCAL=1\n");
+      // Not ignored and in a directory git has never seen, like a new package.
+      yield* fs.makeDirectory(path.join(api, "packages", "new"), { recursive: true });
+      yield* fs.writeFileString(path.join(api, "packages", "new", ".env"), "NEW=1\n");
+      yield* fs.makeDirectory(path.join(api, "node_modules", "pkg"), { recursive: true });
+      yield* fs.writeFileString(path.join(api, "node_modules", "pkg", ".env"), "NOPE=1\n");
+
+      yield* Effect.gen(function* () {
+        const service = yield* FolderService.FolderService;
+        const folder = yield* service.create({
+          name: "Fresh",
+          members: [{ projectId: API, baseBranch: "main" }],
+        });
+        const member = folder.members[0]!;
+
+        expect(yield* gitOutput(member.worktreePath, "rev-parse", "HEAD")).toBe(originHead);
+        expect(member.setup?.baseRef).toBe(`origin/main@${originHead.slice(0, 7)}`);
+        expect([...(member.setup?.envFiles ?? [])].sort()).toEqual([
+          ".env",
+          "apps/web/.env.local",
+          "packages/new/.env",
+        ]);
+        expect(yield* fs.readFileString(path.join(member.worktreePath, ".env"))).toBe("SECRET=1\n");
+        expect(yield* fs.exists(path.join(member.worktreePath, "node_modules"))).toBe(false);
+
+        // Re-copying replaces a stale worktree copy with the checkout's current file.
+        yield* fs.writeFileString(path.join(api, ".env"), "SECRET=2\n");
+        yield* service.copyEnvFiles({ slug: folder.slug, projectId: API });
+        expect(yield* fs.readFileString(path.join(member.worktreePath, ".env"))).toBe("SECRET=2\n");
+      }).pipe(Effect.provide(makeLayer({ [API]: api })));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });

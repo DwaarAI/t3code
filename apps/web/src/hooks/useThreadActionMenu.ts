@@ -38,6 +38,7 @@ import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { useUiStateStore } from "../uiStateStore";
 import { isFolderWorktree, useEnvironmentFolders } from "../state/folders";
 import { useCopyToClipboard } from "./useCopyToClipboard";
+import { useCopyProviderSession } from "./useCopyProviderSession";
 import { useFolderHandoff } from "./useFolderHandoff";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
@@ -98,6 +99,7 @@ export function useThreadActionMenu(input: {
   });
   const handleNewThread = useNewThreadHandler();
   const handOff = useFolderHandoff();
+  const copyProviderSession = useCopyProviderSession();
   const environmentFolders = useEnvironmentFolders();
   const markThreadUnread = useUiStateStore((s) => s.markThreadUnread);
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
@@ -149,6 +151,7 @@ export function useThreadActionMenu(input: {
             thread.environmentId,
             thread.worktreePath,
           ),
+          hasProviderSession: thread.session != null,
           // The chat header has no project-scoped thread list behind the
           // menu, so the "Filter by project" affordance is sidebar-only.
           projectFilter: null,
@@ -275,6 +278,15 @@ export function useThreadActionMenu(input: {
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
             return;
+          case "copy-session-id":
+          case "copy-resume-command":
+            await copyProviderSession({
+              environmentId: threadRef.environmentId,
+              threadId: thread.id,
+              cwd: thread.worktreePath ?? projectCwd,
+              what: action === "copy-session-id" ? "session-id" : "resume-command",
+            });
+            return;
           case "archive": {
             if (confirmThreadArchive) {
               const confirmed = await settlePromise(() =>
@@ -336,6 +348,7 @@ export function useThreadActionMenu(input: {
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
+      copyProviderSession,
       environmentFolders,
       handOff,
       handleNewThread,
