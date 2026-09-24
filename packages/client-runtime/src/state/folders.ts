@@ -52,6 +52,7 @@ export function createFolderEnvironmentAtoms<R, E>(
     restore: mutation(WS_METHODS.foldersRestore, "restore"),
     setIssueStatus: mutation(WS_METHODS.foldersSetIssueStatus, "set-issue-status"),
     delete: mutation(WS_METHODS.foldersDelete, "delete"),
+    copyEnvFiles: mutation(WS_METHODS.foldersCopyEnvFiles, "copy-env-files"),
     writeHandoff: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:folders:write-handoff",
       tag: WS_METHODS.foldersWriteHandoff,
@@ -67,7 +68,8 @@ type MutationTag =
   | typeof WS_METHODS.foldersArchive
   | typeof WS_METHODS.foldersRestore
   | typeof WS_METHODS.foldersSetIssueStatus
-  | typeof WS_METHODS.foldersDelete;
+  | typeof WS_METHODS.foldersDelete
+  | typeof WS_METHODS.foldersCopyEnvFiles;
 
 export interface FolderWorktreeMatch {
   readonly folder: Folder;

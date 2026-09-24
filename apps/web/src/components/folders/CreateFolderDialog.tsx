@@ -27,6 +27,7 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { Label } from "../ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
@@ -57,6 +58,19 @@ export function CreateFolderDialogHost() {
   return request ? (
     <CreateFolderDialog initialEnvironmentId={request.environmentId} addTo={request.addTo} />
   ) : null;
+}
+
+/** One line per repository: where its branch started and which env files it got. */
+function describeFolderSetup(folder: Folder): string {
+  return folder.members
+    .map((member) => {
+      const base = member.setup?.baseRef ? `from ${member.setup.baseRef}` : `on ${member.branch}`;
+      const envCount = member.setup?.envFiles.length ?? 0;
+      const env =
+        envCount === 0 ? "no .env files" : `${envCount} .env file${envCount === 1 ? "" : "s"}`;
+      return `${member.repoName}: ${base}, ${env}`;
+    })
+    .join("; ");
 }
 
 function slugPreview(name: string): string {
@@ -162,7 +176,7 @@ function CreateFolderDialog(props: {
     toastManager.add({
       type: "success",
       title: `Created ${folder.name}`,
-      description: `${folder.members.length} worktree${folder.members.length === 1 ? "" : "s"} on ${folder.members[0]?.branch}`,
+      description: describeFolderSetup(folder),
     });
     // Land in the first repository so the initial prompt can go straight in.
     const first = folder.members[0];
@@ -275,6 +289,9 @@ function CreateFolderDialog(props: {
                     <RepositoryRow
                       key={project.id}
                       project={project}
+                      environmentLabel={
+                        serverConfigs.get(project.environmentId)?.environment.label ?? null
+                      }
                       baseBranch={baseBranches.get(project.id)}
                       onChange={(next) =>
                         setBaseBranches((current) => {
@@ -311,6 +328,7 @@ function CreateFolderDialog(props: {
  */
 function RepositoryRow(props: {
   project: EnvironmentProject;
+  environmentLabel: string | null;
   baseBranch: string | null | undefined;
   onChange: (baseBranch: string | null | undefined) => void;
 }) {
@@ -341,7 +359,15 @@ function RepositoryRow(props: {
           checked={selected}
           onCheckedChange={(checked) => onChange(checked === true ? null : undefined)}
         />
-        <span className="truncate">{project.title}</span>
+        <Tooltip>
+          <TooltipTrigger render={<span className="truncate" />}>{project.title}</TooltipTrigger>
+          <TooltipPopup side="right">
+            <span className="font-mono">{project.workspaceRoot}</span>
+            {props.environmentLabel ? (
+              <span className="block text-muted-foreground">on {props.environmentLabel}</span>
+            ) : null}
+          </TooltipPopup>
+        </Tooltip>
       </label>
       {selected ? (
         <div className="w-44 shrink-0">

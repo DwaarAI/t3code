@@ -14,6 +14,13 @@ Choose **+** next to **Folders** in the sidebar, or **New folder** in the comman
 Each repository gets a worktree on `feat/<folder-name>`, or on the branch you enter. If that
 branch already exists in a repository, the folder checks it out instead of creating it.
 
+New branches start from the latest `origin/<base>`, fetched first, so a worktree is current even
+when your checkout of the base branch is behind; the checkout itself is not changed. Every new or
+restored worktree also gets copies of the project's untracked `.env*` files, which git leaves out
+of worktrees. Hover over a repository in the sidebar to see where its branch started and which
+files were copied. After you change them in the project, choose **Copy .env files** from the
+repository's menu to copy them again.
+
 A new thread opens in the first repository, ready for your first prompt. The first thread
 started in each worktree runs the project's setup script, the same as **New worktree**.
 

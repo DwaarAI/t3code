@@ -27,6 +27,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { openAddRepositoryDialog, openCreateFolderDialog } from "./CreateFolderDialog";
 
@@ -376,6 +377,25 @@ function FolderMemberRow(props: {
   const startFolderThread = useStartFolderThread();
   const archiveMember = useAtomCommand(folderEnvironment.archiveMember, { reportFailure: false });
   const restoreMember = useAtomCommand(folderEnvironment.restoreMember, { reportFailure: false });
+  const copyEnvFiles = useAtomCommand(folderEnvironment.copyEnvFiles, { reportFailure: false });
+  const recopyEnvFiles = async () => {
+    const result = await copyEnvFiles({
+      environmentId,
+      input: { slug: folder.slug, projectId: member.projectId },
+    });
+    if (!settled("Could not copy .env files", result) || result._tag !== "Success") return;
+    const copied =
+      result.value.folder.members.find((entry) => entry.projectId === member.projectId)?.setup
+        ?.envFiles ?? [];
+    toastManager.add({
+      type: "success",
+      title:
+        copied.length === 0
+          ? `No .env files to copy into ${member.repoName}`
+          : `Copied ${copied.length} .env file${copied.length === 1 ? "" : "s"} into ${member.repoName}`,
+      ...(copied.length > 0 ? { description: copied.join(", ") } : {}),
+    });
+  };
   const isArchived = member.archivedAt !== null;
   const threads = props.threads ?? [];
   const running = threads.some((thread) => thread.session?.status === "running");
@@ -413,29 +433,51 @@ function FolderMemberRow(props: {
       className="group/member flex h-7 items-center gap-1 rounded-lg pr-1 hover:bg-sidebar-row-hover data-[active=true]:bg-sidebar-row-selected"
       data-active={props.isActive}
     >
-      <button
-        type="button"
-        disabled={isArchived}
-        onClick={open}
-        className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-1.5 px-1.5 text-left text-sm",
-          isArchived ? "text-sidebar-muted-foreground/50" : "text-sidebar-foreground",
-        )}
-      >
-        <GitBranchIcon aria-hidden className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
-        <span className="truncate">{member.repoName}</span>
-        <span className="truncate text-sidebar-muted-foreground/60 text-xs">
-          {isArchived ? "archived" : member.branch}
-        </span>
-        {running ? (
-          <span aria-label="Agent running" className="size-1.5 shrink-0 rounded-full bg-primary" />
-        ) : null}
-        {threads.length > 0 && !isArchived ? (
-          <span className="ml-auto shrink-0 text-sidebar-muted-foreground/60 text-xs tabular-nums">
-            {threads.length}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={open}
+              className={cn(
+                "flex h-full min-w-0 flex-1 items-center gap-1.5 px-1.5 text-left text-sm",
+                isArchived ? "text-sidebar-muted-foreground/50" : "text-sidebar-foreground",
+              )}
+            />
+          }
+        >
+          <GitBranchIcon aria-hidden className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
+          <span className="truncate">{member.repoName}</span>
+          <span className="truncate text-sidebar-muted-foreground/60 text-xs">
+            {isArchived ? "archived" : member.branch}
           </span>
-        ) : null}
-      </button>
+          {running ? (
+            <span
+              aria-label="Agent running"
+              className="size-1.5 shrink-0 rounded-full bg-primary"
+            />
+          ) : null}
+          {threads.length > 0 && !isArchived ? (
+            <span className="ml-auto shrink-0 text-sidebar-muted-foreground/60 text-xs tabular-nums">
+              {threads.length}
+            </span>
+          ) : null}
+        </TooltipTrigger>
+        <TooltipPopup side="right">
+          <span className="block font-mono">{member.worktreePath}</span>
+          {member.setup?.baseRef ? (
+            <span className="block text-muted-foreground">Started from {member.setup.baseRef}</span>
+          ) : null}
+          {member.setup ? (
+            <span className="block text-muted-foreground">
+              {member.setup.envFiles.length === 0
+                ? "No .env files copied"
+                : `.env files: ${member.setup.envFiles.join(", ")}`}
+            </span>
+          ) : null}
+        </TooltipPopup>
+      </Tooltip>
       {isArchived ? null : (
         <Button
           size="icon-micro"
@@ -469,6 +511,9 @@ function FolderMemberRow(props: {
           ) : (
             <>
               <MenuItem onClick={newThread}>New thread</MenuItem>
+              <MenuItem onClick={() => void recopyEnvFiles()}>
+                Copy .env files from {member.repoName}
+              </MenuItem>
               <MenuItem onClick={() => void navigator.clipboard.writeText(member.worktreePath)}>
                 Copy worktree path
               </MenuItem>

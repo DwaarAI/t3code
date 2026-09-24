@@ -70,6 +70,8 @@ const makeLayer = (harness: Harness) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
           const git: Partial<GitWorkflowService.GitWorkflowService["Service"]> = {
+            // No origin: branches start from the local base, as offline repos do.
+            remoteExists: () => Effect.succeed(false),
             hasCommit: ({ refName }) =>
               Effect.succeed(harness.existingBranches.has(refName.replace("refs/heads/", ""))),
             createWorktree: (input) =>
@@ -101,6 +103,8 @@ const makeLayer = (harness: Harness) =>
     ),
     Layer.provide(
       Layer.mock(GitVcsDriver.GitVcsDriver)({
+        // The project checkouts have no untracked files, so no .env copies.
+        execute: () => Effect.succeed({ stdout: "", stderr: "" } as GitVcsDriver.ExecuteGitResult),
         statusDetailsLocal: (cwd) =>
           Effect.succeed({
             hasWorkingTreeChanges: harness.dirtyWorktrees.has(cwd),

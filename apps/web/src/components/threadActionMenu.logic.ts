@@ -25,6 +25,8 @@ export type ThreadActionMenuId =
   | "copy-path"
   | "copy-branch"
   | "copy-thread-id"
+  | "copy-session-id"
+  | "copy-resume-command"
   | "archive"
   | "delete";
 
@@ -39,6 +41,8 @@ export interface ThreadActionMenuState {
     /** True when the list is already scoped to this thread's project. */
     readonly isActive: boolean;
   } | null;
+  /** The thread has run a provider session, so its native session id may exist. */
+  readonly hasProviderSession?: boolean;
   /** The thread runs in a folder worktree, so it can hand off to a new thread. */
   readonly canHandoff?: boolean;
   readonly isPinned: boolean;
@@ -154,6 +158,16 @@ export function buildThreadActionMenuItems(
           ? [{ id: "copy-branch" as const, label: "Branch", icon: "git-branch" }]
           : []),
         { id: "copy-thread-id", label: "Thread ID", icon: "hash" },
+        ...(state.hasProviderSession
+          ? [
+              { id: "copy-session-id" as const, label: "Session ID", icon: "hash" },
+              {
+                id: "copy-resume-command" as const,
+                label: "Resume command",
+                icon: "copy",
+              },
+            ]
+          : []),
       ],
     },
     { id: "project-settings", label: "Project settings", icon: "settings" },

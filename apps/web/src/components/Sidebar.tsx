@@ -35,6 +35,7 @@ import {
 } from "@t3tools/client-runtime/environment";
 import {
   resolveEnvironmentMachineKind,
+  type EnvironmentId,
   type EnvironmentMachineKind,
   type ProjectIconOverride,
   type ScopedThreadRef,
@@ -52,6 +53,7 @@ import {
   ClockIcon,
   EyeIcon,
   FolderIcon,
+  HashIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
   PinIcon,
@@ -81,6 +83,8 @@ import { useParams, useRouter } from "@tanstack/react-router";
 
 import { useRightPanelStore } from "../rightPanelStore";
 import { folderWorktreeKey, useFolderWorktreeKeys } from "../state/folders";
+import { useCopyProviderSession } from "../hooks/useCopyProviderSession";
+import { providerSessionRef } from "../state/providerSessionRef";
 import { useFolderHandoff } from "../hooks/useFolderHandoff";
 import { SidebarFolders } from "./folders/SidebarFolders";
 import {
@@ -315,6 +319,30 @@ function terminalProcessLabel(count: number): string {
   return `${count} terminal ${count === 1 ? "process" : "processes"} running`;
 }
 
+/**
+ * The provider's own session id, so a thread can be found in `claude --resume`
+ * or `codex resume`. Fetched only while the hover card is open; copy it from
+ * the thread menu.
+ */
+function ThreadProviderSessionLine(props: { environmentId: EnvironmentId; threadId: ThreadId }) {
+  const ref = useEnvironmentQuery(
+    providerSessionRef.ref({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId },
+    }),
+  );
+  const sessionId = ref.data?.sessionId;
+  if (!sessionId) return null;
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <HashIcon className="size-3 shrink-0 stroke-muted-foreground" />
+      <span className="flex min-w-0 font-mono text-foreground/75">
+        <MiddleTruncate value={sessionId} />
+      </span>
+    </div>
+  );
+}
+
 function SidebarThreadTooltip({
   thread,
   project,
@@ -409,6 +437,9 @@ function SidebarThreadTooltip({
                   : modelLabel}
               </div>
             </div>
+          ) : null}
+          {thread.session ? (
+            <ThreadProviderSessionLine environmentId={thread.environmentId} threadId={thread.id} />
           ) : null}
           {terminalStatus ? (
             <div className="flex min-w-0 items-center gap-2">
@@ -2157,6 +2188,7 @@ export default function Sidebar() {
   // Folder threads live under their folder, not in the flat list.
   const folderWorktreeKeys = useFolderWorktreeKeys();
   const handOff = useFolderHandoff();
+  const copyProviderSession = useCopyProviderSession();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -4091,6 +4123,7 @@ export default function Sidebar() {
           api.contextMenu.show(
             buildThreadActionMenuItems({
               branch: thread.branch ?? null,
+              hasProviderSession: thread.session != null,
               canHandoff:
                 thread.worktreePath !== null &&
                 folderWorktreeKeys.has(
@@ -4230,6 +4263,15 @@ export default function Sidebar() {
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
             return;
+          case "copy-session-id":
+          case "copy-resume-command":
+            await copyProviderSession({
+              environmentId: thread.environmentId,
+              threadId: thread.id,
+              cwd: threadWorkspacePath,
+              what: clicked.value === "copy-session-id" ? "session-id" : "resume-command",
+            });
+            return;
           case "archive": {
             if (confirmThreadArchive) {
               const confirmed = await settlePromise(() =>
@@ -4304,6 +4346,7 @@ export default function Sidebar() {
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
+      copyProviderSession,
       folderWorktreeKeys,
       handOff,
       handleMultiSelectContextMenu,

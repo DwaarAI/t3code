@@ -89,6 +89,21 @@ export function uniqueRepoName(
   }
 }
 
+/**
+ * Env files a new worktree lacks: untracked or ignored files named `.env*` in
+ * the project's checkout. `entries` are `git ls-files --others` paths; a
+ * collapsed directory arrives as one `dir/` entry and nothing inside it is
+ * copied, which keeps dependency directories such as node_modules out.
+ */
+export function envFilesToCopy(entries: ReadonlyArray<string>): string[] {
+  return entries.filter((entry) => {
+    if (entry.length === 0 || entry.endsWith("/")) return false;
+    if (entry.split("/").includes("..")) return false;
+    const name = entry.slice(entry.lastIndexOf("/") + 1);
+    return name.startsWith(".env");
+  });
+}
+
 export function folderContextScaffold(input: {
   readonly name: string;
   readonly guidesDir: string;
