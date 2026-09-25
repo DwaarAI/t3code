@@ -77,6 +77,10 @@ describe("SkillService", () => {
           [
             skills.save({ name: "a", files: [] }),
             skills.save({
+              name: "a",
+              files: [{ path: "SKILL.md", contents: "# No frontmatter", executable: false }],
+            }),
+            skills.save({
               name: "b",
               files: [entry, { path: "../escape.sh", contents: "", executable: true }],
             }),
@@ -93,6 +97,7 @@ describe("SkillService", () => {
           ),
         );
         expect(reasons).toEqual([
+          "invalid_input",
           "invalid_input",
           "invalid_input",
           "invalid_input",

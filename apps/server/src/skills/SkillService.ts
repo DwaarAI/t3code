@@ -64,8 +64,15 @@ const textEncoder = new TextEncoder();
  * relative POSIX paths that stay inside the skill folder.
  */
 export function validateSkillFiles(files: ReadonlyArray<SkillFile>): string | null {
-  if (!files.some((file) => file.path === SKILL_ENTRY_FILE)) {
+  const entry = files.find((file) => file.path === SKILL_ENTRY_FILE);
+  if (entry === undefined) {
     return `A skill needs a ${SKILL_ENTRY_FILE} at its top level.`;
+  }
+  // Codex skips skills without a description, and both providers show it in
+  // their skill lists, so a skill without one would silently go missing.
+  const frontmatter = parseSkillFrontmatter(entry.contents);
+  if (frontmatter.kind !== "parsed" || !frontmatter.description?.trim()) {
+    return `${SKILL_ENTRY_FILE} needs a description in its frontmatter (--- description: ... ---).`;
   }
   if (files.length > SKILL_MAX_FILES) {
     return `A skill can hold at most ${SKILL_MAX_FILES} files.`;
