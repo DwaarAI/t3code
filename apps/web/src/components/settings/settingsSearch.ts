@@ -311,6 +311,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["notification reminder remind delay minutes approval input question pending"],
   },
   {
+    id: "test-notification",
+    title: "Test notification",
+    to: "/settings/general",
+    searchTerms: ["notification test check permission badge dock icon"],
+  },
+  {
     id: "time-format",
     title: "Time format",
     to: "/settings/general",

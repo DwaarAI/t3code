@@ -21,8 +21,19 @@ export function hasDesktopNotifications(mode: NotificationMode) {
 
 let originalFavicon: HTMLLinkElement | undefined;
 let badgeFavicon: HTMLLinkElement | undefined;
+let threadBadgeCount = 0;
+let testBadgeShown = false;
 
+/** Badges the dock, taskbar, or favicon with the number of unread thread notifications. */
 export function setNotificationBadge(count: number) {
+  threadBadgeCount = count;
+  applyNotificationBadge();
+}
+
+function applyNotificationBadge() {
+  // A test badge only means something while the app is in the background.
+  if (testBadgeShown && document.hasFocus()) testBadgeShown = false;
+  const count = threadBadgeCount + (testBadgeShown ? 1 : 0);
   const bridge = window.desktopBridge;
   let image: string | null = null;
   if (count > 0 && (!bridge || bridge.getClientPlatform?.() === "win32")) {
@@ -62,6 +73,57 @@ export function setNotificationBadge(count: number) {
     }
   }
   void bridge?.setNotificationBadge?.({ count, image }).catch(() => undefined);
+}
+
+export type NotificationPermissionCheck = "granted" | "denied" | "unsupported";
+
+/** Asks for permission from a click, before a test notification is scheduled. */
+export async function ensureNotificationPermission(): Promise<NotificationPermissionCheck> {
+  if (typeof Notification === "undefined" || !window.isSecureContext) return "unsupported";
+  try {
+    const permission =
+      Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    return permission === "granted" ? "granted" : "denied";
+  } catch {
+    return "unsupported";
+  }
+}
+
+/**
+ * Presents a sample system notification and, while the app is in the
+ * background, one extra badge. Both clear when the app regains focus.
+ */
+export function showTestNotification(withSound: boolean): boolean {
+  let notification: Notification;
+  try {
+    notification = new Notification("T3 Code test notification", {
+      body: "Notifications are working on this device.",
+      tag: "t3code-test-notification",
+      silent: true,
+    });
+  } catch {
+    return false;
+  }
+  if (withSound) void playNotificationSound("completion", () => true);
+  const clear = () => {
+    window.removeEventListener("focus", clear);
+    notification.close();
+    if (!testBadgeShown) return;
+    testBadgeShown = false;
+    applyNotificationBadge();
+  };
+  notification.addEventListener("click", () => {
+    window.focus();
+    clear();
+  });
+  if (!document.hasFocus()) {
+    testBadgeShown = true;
+    applyNotificationBadge();
+    window.addEventListener("focus", clear);
+  }
+  return true;
 }
 
 let audioContext: AudioContext | undefined;

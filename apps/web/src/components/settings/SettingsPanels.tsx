@@ -1,6 +1,10 @@
 import { SettingsGroup } from "./SettingsGroup";
 import { Spinner } from "~/components/ui/spinner";
-import { AttentionReminderSettings, NotificationSettings } from "./NotificationSettings";
+import {
+  AttentionReminderSettings,
+  NotificationSettings,
+  TestNotificationSettings,
+} from "./NotificationSettings";
 import { ArchiveIcon, ArchiveX, CheckIcon, ChevronRightIcon, SettingsIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
@@ -2328,6 +2332,7 @@ export function GeneralSettingsPanel() {
           }
         />
         <AttentionReminderSettings />
+        <TestNotificationSettings />
         <SettingsRow
           {...searchableSetting("time-format")}
           description="System default follows your browser or OS clock preference."
