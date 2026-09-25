@@ -365,6 +365,8 @@ export const withCodexAppServerClient = Effect.fn("withCodexAppServerClient")(fu
   readonly launchArgs?: string | undefined;
   readonly cwd: string;
   readonly environment?: NodeJS.ProcessEnv | undefined;
+  /** Skill directories Codex scans in addition to its own, such as T3's built-ins. */
+  readonly extraSkillRoots?: ReadonlyArray<string> | undefined;
 }) {
   // `~` is not shell-expanded when env vars are set via `child_process.spawn`,
   // so `CODEX_HOME=~/.codex_work` would reach codex verbatim and trip
@@ -406,8 +408,31 @@ export const withCodexAppServerClient = Effect.fn("withCodexAppServerClient")(fu
   );
   const initialize = yield* client.request("initialize", buildCodexInitializeParams());
   yield* client.notify("initialized", undefined);
+  yield* setCodexExtraSkillRoots(client, input.extraSkillRoots);
   return { client, initialize };
 });
+
+/**
+ * Point a connected app-server at extra skill directories. The setting lasts
+ * for the connection, so every client T3 opens sets it after initializing.
+ * Older Codex builds lack the method; they run without the extra skills
+ * rather than failing the connection.
+ */
+export const setCodexExtraSkillRoots = (
+  client: CodexClient.CodexAppServerClient["Service"],
+  extraSkillRoots: ReadonlyArray<string> | undefined,
+) =>
+  extraSkillRoots === undefined || extraSkillRoots.length === 0
+    ? Effect.void
+    : client.request("skills/extraRoots/set", { extraRoots: [...extraSkillRoots] }).pipe(
+        Effect.asVoid,
+        Effect.catch((cause) =>
+          Effect.logDebug("codex app-server did not accept extra skill roots", {
+            extraSkillRoots,
+            cause,
+          }),
+        ),
+      );
 
 const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(function* (input: {
   readonly binaryPath: string;
@@ -416,6 +441,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   readonly cwd: string;
   readonly customModels?: ReadonlyArray<CustomModelSetting>;
   readonly environment?: NodeJS.ProcessEnv;
+  readonly extraSkillRoots?: ReadonlyArray<string>;
 }) {
   const { client, initialize } = yield* withCodexAppServerClient(input);
 
@@ -480,6 +506,7 @@ export const probeCodexSkillsForCwd = Effect.fn("probeCodexSkillsForCwd")(functi
   readonly launchArgs?: string;
   readonly cwd: string;
   readonly environment?: NodeJS.ProcessEnv;
+  readonly extraSkillRoots?: ReadonlyArray<string>;
 }) {
   const { client } = yield* withCodexAppServerClient(input);
   const skillsResponse = yield* client.request("skills/list", { cwds: [input.cwd] });
@@ -567,12 +594,14 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     readonly cwd: string;
     readonly customModels: ReadonlyArray<CustomModelSetting>;
     readonly environment?: NodeJS.ProcessEnv;
+    readonly extraSkillRoots?: ReadonlyArray<string>;
   }) => Effect.Effect<
     CodexAppServerProviderSnapshot,
     CodexErrors.CodexAppServerError,
     ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
   > = probeCodexAppServerProvider,
   environment?: NodeJS.ProcessEnv,
+  extraSkillRoots?: ReadonlyArray<string>,
 ): Effect.fn.Return<
   ServerProviderDraft,
   ServerSettingsError,
@@ -606,6 +635,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     cwd: process.cwd(),
     customModels: codexSettings.customModels,
     environment: resolvedEnvironment,
+    ...(extraSkillRoots ? { extraSkillRoots } : {}),
   }).pipe(
     Effect.scoped,
     Effect.timeoutOption(Duration.millis(AUTH_PROBE_TIMEOUT_MS)),

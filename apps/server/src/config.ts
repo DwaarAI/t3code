@@ -44,6 +44,10 @@ export interface ServerDerivedPaths {
   readonly foldersDir: string;
   /** Reusable guideline markdown files that any thread can attach. */
   readonly guidesDir: string;
+  /** Skills T3 Code adds to every Claude and Codex session, laid out as the `t3` plugin. */
+  readonly skillsDir: string;
+  /** `skillsDir/skills`: one folder per skill, which Codex takes as an extra skill root. */
+  readonly skillRootsDir: string;
   readonly attachmentsDir: string;
   /** Screenshots the agent asks the collaborative browser to keep for the user. */
   readonly browserArtifactsDir: string;
@@ -157,6 +161,8 @@ export const deriveServerPaths = Effect.fn(function* (
     worktreesDir: join(baseDir, "worktrees"),
     foldersDir: join(baseDir, "folders"),
     guidesDir: join(baseDir, "guides"),
+    skillsDir: join(baseDir, "skills"),
+    skillRootsDir: join(baseDir, "skills", "skills"),
     attachmentsDir,
     browserArtifactsDir: join(stateDir, "browser-artifacts"),
     logsDir,

@@ -47,7 +47,6 @@ import {
   FOLDER_CONTEXT_DIR,
   FOLDER_CONTEXT_SUBDIRS,
   FOLDER_MANIFEST_FILE,
-  SEED_GUIDES,
   buildHandoffMarkdown,
   envFilesToCopy,
   folderContextScaffold,
@@ -123,15 +122,11 @@ export const make = Effect.gen(function* () {
     contextDir: path.join(folderDirFor(manifest.slug), FOLDER_CONTEXT_DIR),
   });
 
-  // Each seed is written only while missing: edits are kept, and a deleted
-  // guide comes back on the next listing.
-  const ensureGuidesDir = Effect.gen(function* () {
-    yield* fs.makeDirectory(guidesDir, { recursive: true });
-    for (const [name, contents] of Object.entries(SEED_GUIDES)) {
-      const target = path.join(guidesDir, name);
-      if (!(yield* fs.exists(target))) yield* fs.writeFileString(target, contents);
-    }
-  }).pipe(Effect.mapError(ioFailed(`Could not create the guides directory at ${guidesDir}.`)));
+  // Review instructions moved to the built-in `t3:dwaar-code-reviewer` skill;
+  // guides already written here stay attachable.
+  const ensureGuidesDir = fs
+    .makeDirectory(guidesDir, { recursive: true })
+    .pipe(Effect.mapError(ioFailed(`Could not create the guides directory at ${guidesDir}.`)));
 
   const readManifest = (slug: string) =>
     Effect.gen(function* () {

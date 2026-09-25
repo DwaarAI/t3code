@@ -153,6 +153,10 @@ provider. On mobile, both are also available before starting a thread on
 The slash menu also includes skills unless you turn off **Settings → General →
 Show skills in slash menu**. Only skills enabled for the provider are listed.
 
+T3 Code adds its built-in skills to Claude and Codex sessions under the `t3:` prefix, such as
+`$t3:dwaar-code-reviewer`. They come with the server and update with it, and they do not change
+your own Claude or Codex skill folders. Other providers do not get them yet.
+
 Provider commands must start the message to run. T3 Code commands such as
 `/model` and `/plan`, and skill mentions, work on any line.
 

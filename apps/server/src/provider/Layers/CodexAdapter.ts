@@ -2291,6 +2291,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             : {}),
           ...(serviceTier ? { serviceTier } : {}),
           ...(folderContext ? { folderContext } : {}),
+          extraSkillRoots: [serverConfig.skillRootsDir],
           ...(mcpSession
             ? {
                 environment: {

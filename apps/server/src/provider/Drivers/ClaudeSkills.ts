@@ -25,8 +25,9 @@ import { fromLenientJson } from "@t3tools/shared/schemaJson";
 import { parse as parseYamlDocument } from "yaml";
 
 import { expandHomePath } from "../../pathExpansion.ts";
+import { builtinSkillCommandName } from "../../skills/builtinSkills.ts";
 
-type ClaudeSkillScope = "user" | "project";
+type ClaudeSkillScope = "user" | "project" | "builtin";
 
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
@@ -296,8 +297,10 @@ const resolveClaudeConfigDirPath = Effect.fn("resolveClaudeConfigDirPath")(funct
 });
 
 /**
- * Enumerate Claude Code skills from the user config dir and the workspace
- * `.claude/skills`. Discovery is best-effort: unreadable roots and malformed
+ * Enumerate Claude Code skills from the user config dir, the workspace
+ * `.claude/skills`, and T3 Code's built-in `t3` plugin when its directory is
+ * given. Plugin skills are published as `t3:<name>`, so they never collide
+ * with the other roots. Discovery is best-effort: unreadable roots and malformed
  * skill entries are skipped so a broken skill never degrades the provider
  * snapshot. Roots are listed highest precedence first and the first hit for a
  * name wins, matching Claude Code: verified against the CLI with the same
@@ -309,15 +312,28 @@ export const discoverClaudeSkills = Effect.fn("discoverClaudeSkills")(function* 
   config: Pick<ClaudeSettings, "homePath">,
   cwd?: string,
   environment?: NodeJS.ProcessEnv,
+  /** The built-in plugin's `skills/` directory (`ServerConfig.skillRootsDir`). */
+  builtinSkillRootsDir?: string,
 ): Effect.fn.Return<ReadonlyArray<ServerProviderSkill>, never, FileSystem.FileSystem | Path.Path> {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const configDirPath = yield* resolveClaudeConfigDirPath(config, environment ?? process.env, cwd);
   const skillOverrides = yield* readSkillOverrides(configDirPath, cwd, environment ?? process.env);
 
-  const roots: ReadonlyArray<{ directory: string; scope: ClaudeSkillScope }> = [
-    { directory: path.join(configDirPath, "skills"), scope: "user" },
-    ...(cwd ? [{ directory: path.join(cwd, ".claude", "skills"), scope: "project" as const }] : []),
+  const roots: ReadonlyArray<{ directory: string; scope: ClaudeSkillScope; prefix: string }> = [
+    { directory: path.join(configDirPath, "skills"), scope: "user", prefix: "" },
+    ...(cwd
+      ? [{ directory: path.join(cwd, ".claude", "skills"), scope: "project" as const, prefix: "" }]
+      : []),
+    ...(builtinSkillRootsDir
+      ? [
+          {
+            directory: builtinSkillRootsDir,
+            scope: "builtin" as const,
+            prefix: builtinSkillCommandName(""),
+          },
+        ]
+      : []),
   ];
 
   const skillsByName = new Map<string, ServerProviderSkill>();
@@ -349,10 +365,11 @@ export const discoverClaudeSkills = Effect.fn("discoverClaudeSkills")(function* 
       // `probe-alias`, and only `skillOverrides["probe-alias"]` switches it
       // off. Keying off the frontmatter name would report a command that does
       // not exist and miss the override that disables it.
-      const name = entry.trim();
-      if (!name) {
+      const directoryName = entry.trim();
+      if (!directoryName) {
         continue;
       }
+      const name = `${root.prefix}${directoryName}`;
 
       // First root wins, so a later root never displaces a higher-precedence
       // skill of the same name.
