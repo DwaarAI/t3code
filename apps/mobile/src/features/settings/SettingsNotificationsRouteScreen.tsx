@@ -34,6 +34,7 @@ import { hasCloudPublicConfig, resolveRelayClerkTokenOptions } from "../cloud/pu
 import { runtime } from "../../lib/runtime";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
+import { AttentionReminderSettingsSection } from "./AttentionReminderSettingsSection";
 import { SettingsRow } from "./components/SettingsRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -62,10 +63,11 @@ export function SettingsNotificationsRouteScreen() {
       <SettingsScreen title="Notifications">
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerClassName="px-5 pt-4"
+          contentContainerClassName="gap-6 px-5 pt-4"
         >
-          <Text className="text-base text-foreground-muted">
-            Notifications require T3 Connect in this app build.
+          <AttentionReminderSettingsSection />
+          <Text className="px-2 text-sm text-foreground-muted">
+            Push notifications and ongoing activity require T3 Connect in this app build.
           </Text>
         </ScrollView>
       </SettingsScreen>
@@ -493,6 +495,7 @@ function ConfiguredSettingsNotificationsRouteScreen() {
             />
           ) : null}
         </SettingsSection>
+        <AttentionReminderSettingsSection />
       </ScrollView>
     </SettingsScreen>
   );

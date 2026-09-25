@@ -23,6 +23,10 @@
       "types": "./src/projectFaviconCache.ts",
       "default": "./src/projectFaviconCache.ts"
     },
+    "./attention-reminders": {
+      "types": "./src/attentionReminders.ts",
+      "default": "./src/attentionReminders.ts"
+    },
     "./pending-requests": {
       "types": "./src/pendingRequests.ts",
       "default": "./src/pendingRequests.ts"

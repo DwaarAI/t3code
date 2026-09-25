@@ -291,11 +291,20 @@ export const LoadBalancingWeights = Schema.Record(
 
 export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 
+/** Minutes a pending approval or question waits before this device reminds again; 0 turns reminders off. */
+export const AttentionReminderMinutes = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: 24 * 60 }),
+);
+export const DEFAULT_ATTENTION_REMINDER_MINUTES = 5;
+
 export const ClientSettingsSchema = Schema.Struct({
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("off" as const)),
   ),
   inAppNotificationsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  attentionReminderMinutes: AttentionReminderMinutes.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_ATTENTION_REMINDER_MINUTES)),
+  ),
   diffColorScheme: DiffColorScheme.pipe(
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
@@ -1569,6 +1578,7 @@ export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 export const ClientSettingsPatch = Schema.Struct({
   notificationMode: Schema.optionalKey(NotificationMode),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
+  attentionReminderMinutes: Schema.optionalKey(AttentionReminderMinutes),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),

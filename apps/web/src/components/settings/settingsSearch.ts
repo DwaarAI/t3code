@@ -305,6 +305,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["notification toast popup completion input approval failure"],
   },
   {
+    id: "attention-reminders",
+    title: "Unanswered reminders",
+    to: "/settings/general",
+    searchTerms: ["notification reminder remind delay minutes approval input question pending"],
+  },
+  {
     id: "time-format",
     title: "Time format",
     to: "/settings/general",

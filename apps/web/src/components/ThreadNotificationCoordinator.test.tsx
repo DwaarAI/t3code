@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 const state = vi.hoisted(() => ({
   mode: "off" as ClientSettings["notificationMode"],
   inApp: true,
+  reminderMinutes: 0,
   active: { environmentId: "env-1", threadId: "other-thread" },
   focused: true,
   visible: "visible",
@@ -58,9 +59,17 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("../hooks/useSettings", () => ({
   useClientSettings: (
     select: (
-      settings: Pick<ClientSettings, "notificationMode" | "inAppNotificationsEnabled">,
+      settings: Pick<
+        ClientSettings,
+        "notificationMode" | "inAppNotificationsEnabled" | "attentionReminderMinutes"
+      >,
     ) => unknown,
-  ) => select({ notificationMode: state.mode, inAppNotificationsEnabled: state.inApp }),
+  ) =>
+    select({
+      notificationMode: state.mode,
+      inAppNotificationsEnabled: state.inApp,
+      attentionReminderMinutes: state.reminderMinutes,
+    }),
   getClientSettings: () => ({ notificationMode: state.mode }),
 }));
 vi.mock("../state/environments", () => ({
@@ -99,6 +108,7 @@ beforeEach(() => {
   Object.assign(state, {
     mode: "off",
     inApp: true,
+    reminderMinutes: 0,
     active: { environmentId: "env-1", threadId: "other-thread" },
     focused: true,
     visible: "visible",
@@ -127,6 +137,7 @@ afterEach(async () => {
   await act(() => renderer?.unmount());
   renderer = undefined;
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("thread notifications", () => {
@@ -250,5 +261,92 @@ describe("thread notifications", () => {
       tag: "env-1:thread-1",
       silent: true,
     });
+  });
+});
+
+describe("unanswered request reminders", () => {
+  async function wait(minutes: number) {
+    await act(() => vi.advanceTimersByTime(minutes * 60_000));
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    state.mode = "notifications";
+    state.focused = false;
+    state.reminderMinutes = 5;
+  });
+
+  it("reminds once after the delay while the approval stays pending", async () => {
+    await render();
+    state.approval = true;
+    await render();
+    expect(state.notification).toHaveBeenCalledTimes(1);
+    await wait(4);
+    expect(state.notification).toHaveBeenCalledTimes(1);
+    await wait(1);
+    expect(state.notification).toHaveBeenCalledTimes(2);
+    expect(state.notification).toHaveBeenLastCalledWith("Still waiting for approval", {
+      body: "Fix the login form",
+      tag: "env-1:thread-1",
+      silent: true,
+    });
+    await render();
+    await wait(30);
+    expect(state.notification).toHaveBeenCalledTimes(2);
+  });
+
+  it("reminds about requests already pending when the app starts", async () => {
+    state.input = true;
+    await render();
+    expect(state.notification).not.toHaveBeenCalled();
+    await wait(5);
+    expect(state.notification).toHaveBeenCalledWith("Still waiting for your answer", {
+      body: "Fix the login form",
+      tag: "env-1:thread-1",
+      silent: true,
+    });
+  });
+
+  it("cancels the reminder once the request is answered", async () => {
+    state.input = true;
+    await render();
+    await wait(2);
+    state.input = false;
+    await render();
+    await wait(10);
+    expect(state.notification).not.toHaveBeenCalled();
+  });
+
+  it("waits for a live connection, since another device may have answered", async () => {
+    state.input = true;
+    await render();
+    state.live = false;
+    await render();
+    await wait(5);
+    expect(state.notification).not.toHaveBeenCalled();
+    state.live = true;
+    await render();
+    await wait(5);
+    expect(state.notification).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when reminders are off", async () => {
+    state.reminderMinutes = 0;
+    state.approval = true;
+    await render();
+    await wait(60);
+    expect(state.notification).not.toHaveBeenCalled();
+  });
+
+  it("restarts pending reminders with a new delay", async () => {
+    state.approval = true;
+    await render();
+    await wait(4);
+    state.reminderMinutes = 10;
+    await render();
+    await wait(9);
+    expect(state.notification).not.toHaveBeenCalled();
+    await wait(1);
+    expect(state.notification).toHaveBeenCalledTimes(1);
   });
 });

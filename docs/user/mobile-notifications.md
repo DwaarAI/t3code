@@ -9,3 +9,7 @@ Ordinary alerts stay quiet while the mobile app is in the foreground. Ongoing ac
 Android notifications require Android 7.0 or newer and Google Play services. Android 16 and newer can promote ongoing activity to a Live Update, subject to system settings and device support. Other devices show a regular ongoing notification. Android 7's battery-saving modes can delay removal of expired cards.
 
 Notification permission and Android notification channels are controlled in system Settings. Background delivery requires T3 Connect; a direct or Tailscale connection alone does not enable push notifications. The mobile app does not need to maintain a connection to your environment. Force-stopping the Android app in system Settings prevents push delivery until you open it again.
+
+## Unanswered reminders
+
+**Settings → Notifications → Unanswered reminders** notifies your phone when an approval or question has waited for the chosen time (5 minutes by default). Reminders are scheduled on the phone itself, so they work over a direct or Tailscale connection without T3 Connect, and still arrive when the app is in the background. The phone learns that a request was answered only while it is connected to the environment: if you answer from another device while the app is closed, the reminder may still appear, and it is removed the next time the app reconnects. Web and desktop have the same setting in **Settings → General**, which repeats the thread notification while the app is open.
