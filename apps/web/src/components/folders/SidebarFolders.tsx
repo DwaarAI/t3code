@@ -24,12 +24,16 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { folderEnvironment, useEnvironmentFolders } from "../../state/folders";
+import { useEnvironmentQuery } from "../../state/query";
+import { vcsEnvironment } from "../../state/vcs";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
+import { useRetainedValue, useSidebarRowSubscriptionLease } from "../Sidebar.logic";
+import { prStatusIndicator } from "../ThreadStatusIndicators";
 import { openAddRepositoryDialog, openCreateFolderDialog } from "./CreateFolderDialog";
 
 const ISSUE_STATUSES = ["in-progress", "in-review", "done"] as const;
@@ -523,6 +527,19 @@ function FolderMemberRow(props: {
   const isArchived = member.archivedAt !== null;
   const threads = props.threads ?? [];
   const running = threads.some((thread) => thread.session?.status === "running");
+  // The worktree's git status carries its branch's pull request. Rows only
+  // subscribe near the viewport, and share the query with the thread rows and
+  // chat header for the same worktree.
+  const { leaseLiveStatus, rowRef } = useSidebarRowSubscriptionLease(props.isActive);
+  const gitStatus = useEnvironmentQuery(
+    leaseLiveStatus && !isArchived
+      ? vcsEnvironment.status({ environmentId, input: { cwd: member.worktreePath } })
+      : null,
+  );
+  const visibleGitStatus = useRetainedValue(member.worktreePath, gitStatus.data);
+  const prStatus = isArchived
+    ? null
+    : prStatusIndicator(visibleGitStatus?.pr ?? null, visibleGitStatus?.sourceControlProvider);
 
   const newThread = () => void startFolderThread(environmentId, folder, member);
 
@@ -554,6 +571,7 @@ function FolderMemberRow(props: {
 
   return (
     <li
+      ref={rowRef}
       className="group/member flex h-7 items-center gap-1 rounded-lg pr-1 hover:bg-sidebar-row-hover data-[active=true]:bg-sidebar-row-selected"
       data-active={props.isActive}
     >
@@ -571,7 +589,18 @@ function FolderMemberRow(props: {
             />
           }
         >
-          <GitBranchIcon aria-hidden className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
+          {prStatus ? (
+            <prStatus.Icon
+              role="img"
+              aria-label={prStatus.label}
+              className={cn("size-3.5 shrink-0", prStatus.colorClass)}
+            />
+          ) : (
+            <GitBranchIcon
+              aria-hidden
+              className="size-3.5 shrink-0 text-sidebar-muted-foreground"
+            />
+          )}
           <span className="truncate">{member.repoName}</span>
           <span className="truncate text-sidebar-muted-foreground/60 text-xs">
             {isArchived ? "archived" : member.branch}
@@ -589,6 +618,7 @@ function FolderMemberRow(props: {
           ) : null}
         </TooltipTrigger>
         <TooltipPopup side="right">
+          {prStatus ? <span className="block">{prStatus.tooltip}</span> : null}
           <span className="block font-mono">{member.worktreePath}</span>
           {member.setup?.baseRef ? (
             <span className="block text-muted-foreground">Started from {member.setup.baseRef}</span>

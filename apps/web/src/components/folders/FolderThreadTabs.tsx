@@ -30,7 +30,7 @@ interface FolderThreadTabsProps {
   readonly projectId: ProjectId;
   readonly threadId: ThreadId;
   readonly worktreePath: string | null;
-  /** False for a draft, which has no thread to hand off yet. */
+  /** False for a draft, which has no thread to hand off yet; it can still start a review. */
   readonly isServerThread: boolean;
 }
 
@@ -62,6 +62,14 @@ function FolderThreadTabStrip(
   const scopeLabel = member?.repoName ?? "All repositories";
   const isDraft = !threads.some((thread) => thread.id === threadId);
   const current = threads.find((thread) => thread.id === threadId);
+  // Review whatever is in the worktree, including changes other threads made,
+  // so a fresh draft can start one too.
+  const reviewSource = current ?? {
+    environmentId,
+    projectId: props.projectId,
+    branch: member?.branch ?? null,
+    worktreePath: props.worktreePath,
+  };
 
   const newThread = () =>
     void (member
@@ -128,15 +136,13 @@ function FolderThreadTabStrip(
           <PlusIcon />
         </Button>
       </div>
+      <Button size="xs" variant="ghost" onClick={() => void startReview(reviewSource)}>
+        Review
+      </Button>
       {props.isServerThread && current ? (
-        <>
-          <Button size="xs" variant="ghost" onClick={() => void startReview(current)}>
-            Review
-          </Button>
-          <Button size="xs" variant="ghost" onClick={() => void handOff(current)}>
-            Handoff
-          </Button>
-        </>
+        <Button size="xs" variant="ghost" onClick={() => void handOff(current)}>
+          Handoff
+        </Button>
       ) : null}
     </div>
   );
