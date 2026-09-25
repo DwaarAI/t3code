@@ -1,11 +1,14 @@
 import { useState } from "react";
 
 import {
+  ensureNotificationPermission,
   hasDesktopNotifications,
   hasNotificationSound,
   NOTIFICATION_MODE_LABELS,
+  showTestNotification,
   unlockNotificationAudio,
 } from "../../threadNotifications";
+import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
@@ -77,6 +80,75 @@ export function NotificationSettings() {
             ))}
           </SelectPopup>
         </Select>
+      }
+    />
+  );
+}
+
+const TEST_NOTIFICATION_DELAY_MS = 5_000;
+
+function systemNotificationSettingsHint() {
+  const platform = window.desktopBridge?.getClientPlatform?.();
+  if (platform === "darwin") {
+    return "allow T3 Code, including Badges, in System Settings → Notifications";
+  }
+  if (platform === "win32") return "allow T3 Code in Settings → System → Notifications";
+  if (platform === "linux") return "check your desktop's notification settings";
+  return "allow notifications for this site in your browser";
+}
+
+/** Sends a sample alert after a short delay, so the app can be in the background. */
+export function TestNotificationSettings() {
+  const mode = useScopedSettings((settings) => settings.notificationMode);
+  const [status, setStatus] = useState<"idle" | "waiting">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  return (
+    <SettingsRow
+      {...searchableSetting("test-notification")}
+      description={
+        message ??
+        "Sends a system notification in 5 seconds. Switch to another app to also see the badge on the app icon."
+      }
+      control={
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={status === "waiting"}
+          onClick={async () => {
+            setMessage(null);
+            // Audio and permission prompts only unlock from a click.
+            if (hasNotificationSound(mode)) unlockNotificationAudio();
+            const permission = await ensureNotificationPermission();
+            if (permission === "unsupported") {
+              setMessage(
+                "System notifications need a supported browser over HTTPS, or the desktop app.",
+              );
+              return;
+            }
+            if (permission === "denied") {
+              setMessage(
+                `Notifications are blocked. To fix it, ${systemNotificationSettingsHint()}.`,
+              );
+              return;
+            }
+            setStatus("waiting");
+            setTimeout(() => {
+              setStatus("idle");
+              if (!showTestNotification(hasNotificationSound(mode))) {
+                setMessage("This browser refused to show the notification.");
+                return;
+              }
+              setMessage(
+                hasDesktopNotifications(mode)
+                  ? `Sent. If nothing appeared, ${systemNotificationSettingsHint()}.`
+                  : "Sent. Thread notifications are off, so threads will not alert until you turn them on above.",
+              );
+            }, TEST_NOTIFICATION_DELAY_MS);
+          }}
+        >
+          {status === "waiting" ? "Sending in 5 seconds…" : "Send test notification"}
+        </Button>
       }
     />
   );
