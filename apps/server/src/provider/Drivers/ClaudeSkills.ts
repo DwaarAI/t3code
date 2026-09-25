@@ -31,7 +31,7 @@ type ClaudeSkillScope = "user" | "project" | "builtin";
 
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
-type SkillFrontmatter =
+export type SkillFrontmatter =
   | { readonly kind: "missing" }
   | { readonly kind: "malformed" }
   | {
@@ -70,7 +70,7 @@ function parseFrontmatterBoolean(value: unknown): boolean | undefined {
   }
 }
 
-function parseSkillFrontmatter(contents: string): SkillFrontmatter {
+export function parseSkillFrontmatter(contents: string): SkillFrontmatter {
   const match = FRONTMATTER_PATTERN.exec(contents);
   if (!match) {
     return { kind: "missing" };

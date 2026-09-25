@@ -124,6 +124,13 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.foldersDelete]: AuthOrchestrationOperateScope,
   [WS_METHODS.foldersCopyEnvFiles]: AuthOrchestrationOperateScope,
   [WS_METHODS.foldersOpenRoot]: AuthOrchestrationOperateScope,
+  [WS_METHODS.skillsList]: AuthOrchestrationReadScope,
+  [WS_METHODS.skillsGet]: AuthOrchestrationReadScope,
+  // Skill scripts run on this machine inside agent sessions, so writing them
+  // needs the same scope as driving an agent.
+  [WS_METHODS.skillsSave]: AuthOrchestrationOperateScope,
+  [WS_METHODS.skillsDelete]: AuthOrchestrationOperateScope,
+  [WS_METHODS.skillsSetEnabled]: AuthOrchestrationOperateScope,
   [WS_METHODS.shellOpenInEditor]: AuthOrchestrationOperateScope,
   [WS_METHODS.filesystemBrowse]: AuthOrchestrationReadScope,
   [WS_METHODS.agentSessionsScan]: AuthOrchestrationReadScope,

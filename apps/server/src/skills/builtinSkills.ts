@@ -21,7 +21,11 @@ import { BUILTIN_SKILL_FILES, type BuiltinSkillFile } from "./builtinSkills.gen.
 export const BUILTIN_SKILLS_PLUGIN_NAME = "t3";
 
 /** Marks a directory under `skills/` as server-owned, so it is replaced on every start. */
-const BUILTIN_SKILL_MARKER = ".t3-builtin";
+export const BUILTIN_SKILL_MARKER = ".t3-builtin";
+
+/** Directory names of the skills this server build ships. */
+export const builtinSkillNames = (files: ReadonlyArray<BuiltinSkillFile> = BUILTIN_SKILL_FILES) =>
+  new Set(files.map((file) => file.path.split("/")[0] ?? ""));
 
 /** The name agents and the `$` picker use for a built-in skill. */
 export const builtinSkillCommandName = (name: string) => `${BUILTIN_SKILLS_PLUGIN_NAME}:${name}`;
@@ -36,7 +40,8 @@ const PLUGIN_MANIFEST = `{
  * Rewrite the built-in skills from the copy embedded in this server build.
  * Earlier built-ins, including ones a newer build dropped, are removed first,
  * so the directory always matches the running server. Skill directories
- * without the marker are left alone.
+ * without the marker are custom skills: they are left alone, and a built-in
+ * sharing a custom skill's name is skipped rather than overwriting it.
  */
 export const installBuiltinSkills = Effect.fn("installBuiltinSkills")(function* (
   dirs: { readonly skillsDir: string; readonly skillRootsDir: string },
@@ -60,10 +65,16 @@ export const installBuiltinSkills = Effect.fn("installBuiltinSkills")(function* 
     }
   }
 
-  const names = new Set<string>();
+  const names = builtinSkillNames(files);
+  for (const name of names) {
+    if (yield* fs.exists(path.join(rootsDir, name))) {
+      names.delete(name);
+      yield* Effect.logWarning("Skipping a built-in skill that a custom skill shadows.", { name });
+    }
+  }
   for (const file of files) {
+    if (!names.has(file.path.split("/")[0] ?? "")) continue;
     const target = path.join(rootsDir, ...file.path.split("/"));
-    names.add(file.path.split("/")[0] ?? "");
     yield* fs.makeDirectory(path.dirname(target), { recursive: true });
     yield* fs.writeFileString(target, file.contents);
     if (file.executable) yield* fs.chmod(target, 0o755);

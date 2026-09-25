@@ -53,4 +53,25 @@ it.layer(NodeServices.layer)("builtinSkills", (it) => {
       assert.notStrictEqual(script.mode & 0o111, 0);
     }),
   );
+
+  it.effect("keeps a custom skill that shares a built-in's name", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const skillsDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-builtin-skills-" });
+      const dirs = { skillsDir, skillRootsDir: path.join(skillsDir, "skills") };
+      yield* fs.makeDirectory(path.join(dirs.skillRootsDir, "deploy"), { recursive: true });
+      yield* fs.writeFileString(path.join(dirs.skillRootsDir, "deploy", "SKILL.md"), "mine");
+
+      yield* installBuiltinSkills(dirs, [
+        { path: "deploy/SKILL.md", executable: false, contents: "built-in" },
+      ]);
+
+      assert.strictEqual(
+        yield* fs.readFileString(path.join(dirs.skillRootsDir, "deploy", "SKILL.md")),
+        "mine",
+      );
+      assert.isFalse(yield* fs.exists(path.join(dirs.skillRootsDir, "deploy", ".t3-builtin")));
+    }),
+  );
 });
