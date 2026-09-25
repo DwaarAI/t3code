@@ -23,6 +23,7 @@ import { Argument, Flag } from "effect/unstable/cli";
 import { readBootstrapEnvelope } from "../bootstrap.ts";
 import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
+import { installBuiltinSkills } from "../skills/builtinSkills.ts";
 
 const modeFlag = Flag.Literals("mode", ServerConfig.RuntimeMode.literals).pipe(
   Flag.withDescription("Runtime mode. `desktop` keeps loopback defaults unless overridden."),
@@ -324,6 +325,15 @@ export const resolveServerConfig = (
       baseDirIsExplicit: Option.isSome(explicitBaseDir),
     });
     yield* ServerConfig.ensureServerDirectories(derivedPaths);
+    // Before any provider starts, so the first skill listings include them.
+    yield* installBuiltinSkills(derivedPaths).pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("Could not install built-in skills.", {
+          skillsDir: derivedPaths.skillsDir,
+          cause,
+        }),
+      ),
+    );
     const persistedObservabilitySettings = yield* loadPersistedObservabilitySettings(
       derivedPaths.settingsPath,
     );

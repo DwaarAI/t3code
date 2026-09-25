@@ -17,6 +17,16 @@ import {
   FoldersListResult,
 } from "./folder.ts";
 import {
+  SkillError,
+  SkillRefInput,
+  SkillResult,
+  SkillsGetResult,
+  SkillsListInput,
+  SkillsListResult,
+  SkillsSaveInput,
+  SkillsSetEnabledInput,
+} from "./skills.ts";
+import {
   ProviderAuthCancelInput,
   ProviderAuthCompleteInput,
   ProviderAuthState,
@@ -315,6 +325,13 @@ export const WS_METHODS = {
   foldersDelete: "folders.delete",
   foldersCopyEnvFiles: "folders.copyEnvFiles",
   foldersOpenRoot: "folders.openRoot",
+
+  // Skill methods
+  skillsList: "skills.list",
+  skillsGet: "skills.get",
+  skillsSave: "skills.save",
+  skillsDelete: "skills.delete",
+  skillsSetEnabled: "skills.setEnabled",
 
   // Shell methods
   shellOpenInEditor: "shell.openInEditor",
@@ -994,6 +1011,37 @@ const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 });
 
 const FolderRpcError = Schema.Union([FolderError, EnvironmentAuthorizationError]);
+const SkillRpcError = Schema.Union([SkillError, EnvironmentAuthorizationError]);
+
+const WsSkillsListRpc = Rpc.make(WS_METHODS.skillsList, {
+  payload: SkillsListInput,
+  success: SkillsListResult,
+  error: SkillRpcError,
+});
+
+const WsSkillsGetRpc = Rpc.make(WS_METHODS.skillsGet, {
+  payload: SkillRefInput,
+  success: SkillsGetResult,
+  error: SkillRpcError,
+});
+
+const WsSkillsSaveRpc = Rpc.make(WS_METHODS.skillsSave, {
+  payload: SkillsSaveInput,
+  success: SkillResult,
+  error: SkillRpcError,
+});
+
+const WsSkillsDeleteRpc = Rpc.make(WS_METHODS.skillsDelete, {
+  payload: SkillRefInput,
+  success: SkillRefInput,
+  error: SkillRpcError,
+});
+
+const WsSkillsSetEnabledRpc = Rpc.make(WS_METHODS.skillsSetEnabled, {
+  payload: SkillsSetEnabledInput,
+  success: SkillResult,
+  error: SkillRpcError,
+});
 
 const WsFoldersListRpc = Rpc.make(WS_METHODS.foldersList, {
   payload: FoldersListInput,
@@ -1594,6 +1642,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsFoldersDeleteRpc,
   WsFoldersCopyEnvFilesRpc,
   WsFoldersOpenRootRpc,
+  WsSkillsListRpc,
+  WsSkillsGetRpc,
+  WsSkillsSaveRpc,
+  WsSkillsDeleteRpc,
+  WsSkillsSetEnabledRpc,
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAgentSessionsScanRpc,

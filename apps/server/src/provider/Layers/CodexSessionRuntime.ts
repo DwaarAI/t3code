@@ -36,7 +36,7 @@ import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
-import { buildCodexInitializeParams } from "./CodexProvider.ts";
+import { buildCodexInitializeParams, setCodexExtraSkillRoots } from "./CodexProvider.ts";
 import { codexSessionAppServerArgs } from "./codexLaunchArgs.ts";
 import type { FolderSessionContext } from "../../folder/folderLayout.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
@@ -184,6 +184,8 @@ export interface CodexSessionRuntimeOptions {
   readonly mcpCapabilities?: ReadonlySet<string>;
   /** Set when the cwd is a folder worktree: extra instructions and writable roots. */
   readonly folderContext?: FolderSessionContext;
+  /** Skill directories Codex scans in addition to its own, such as T3's built-ins. */
+  readonly extraSkillRoots?: ReadonlyArray<string>;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -2447,6 +2449,7 @@ export const makeCodexSessionRuntime = (
       yield* emitSessionEvent("session/connecting", "Starting Codex App Server session.");
       yield* client.request("initialize", buildCodexInitializeParams());
       yield* client.notify("initialized", undefined);
+      yield* setCodexExtraSkillRoots(client, options.extraSkillRoots);
 
       const requestedModel = normalizeCodexModelSlug(options.model);
 

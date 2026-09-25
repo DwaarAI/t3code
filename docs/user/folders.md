@@ -86,17 +86,16 @@ Codex to review work Claude implemented, and add your instruction.
 
 Choose **Review** in the tab bar, or **Review in a new Codex session** from any thread's menu. T3
 Code opens a new thread in the same worktree or folder session, switches it to Codex, and fills
-in a review request against the branch's base with the `review.md` guide attached. Send it as is
-or add what to focus on. The reviewer lists its findings, saves them to `.context/reviews/` in a
-folder, and posts them to the branch's pull request only when you ask. If Codex is not set up on
-that machine, the draft keeps the current provider.
+in a review request against the branch's base that uses the built-in `$t3:dwaar-code-reviewer`
+skill. Send it as is or add what to focus on. The reviewer lists its findings, saves them to
+`.context/reviews/` in a folder, and posts them to the branch's pull request only when you ask.
+If Codex is not set up on that machine, the draft keeps the current provider.
 
 ## Reusable guides
 
 Markdown files in the `guides` directory of your T3 Code home (`~/.t3/guides` by default) can be
-attached to any thread. Type `@` in the composer and search for the file name. T3 Code creates
-`review.md`, the guide Review uses, when it is missing; edit it to change how reviews work, or add
-your own guides, such as team conventions.
+attached to any thread. Type `@` in the composer and search for the file name. Add your own
+guides, such as team conventions.
 
 ## Work from GitHub issues
 

@@ -143,6 +143,7 @@ import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderService from "./folder/FolderService.ts";
+import * as SkillService from "./skills/SkillService.ts";
 import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
@@ -619,6 +620,17 @@ const makeWsRpcLayer = (
       });
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const folderService = yield* FolderService.FolderService;
+      const skillService = yield* SkillService.SkillService;
+      // Claude and Codex list skills when probed; re-probe after a skill
+      // changes so `$` pickers catch up without holding the RPC open.
+      const afterSkillChange = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(
+          Effect.tap(() =>
+            providerRegistry
+              .refresh()
+              .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid),
+          ),
+        );
       const worktreeSetupTracker = yield* WorktreeSetupTracker.WorktreeSetupTracker;
       const projectCloneTracker = yield* ProjectCloneTracker.ProjectCloneTracker;
       const repositoryIdentityResolver =
@@ -3075,6 +3087,32 @@ const makeWsRpcLayer = (
               ),
             ),
             { "rpc.aggregate": "provider" },
+          ),
+        [WS_METHODS.skillsList]: () =>
+          observeRpcEffect(WS_METHODS.skillsList, skillService.list(), {
+            "rpc.aggregate": "skill",
+          }),
+        [WS_METHODS.skillsGet]: (input) =>
+          observeRpcEffect(WS_METHODS.skillsGet, skillService.get(input), {
+            "rpc.aggregate": "skill",
+          }),
+        [WS_METHODS.skillsSave]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.skillsSave,
+            afterSkillChange(skillService.save(input)).pipe(Effect.map((skill) => ({ skill }))),
+            { "rpc.aggregate": "skill" },
+          ),
+        [WS_METHODS.skillsDelete]: (input) =>
+          observeRpcEffect(WS_METHODS.skillsDelete, afterSkillChange(skillService.delete(input)), {
+            "rpc.aggregate": "skill",
+          }),
+        [WS_METHODS.skillsSetEnabled]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.skillsSetEnabled,
+            afterSkillChange(skillService.setEnabled(input)).pipe(
+              Effect.map((skill) => ({ skill })),
+            ),
+            { "rpc.aggregate": "skill" },
           ),
         [WS_METHODS.foldersList]: () =>
           observeRpcEffect(WS_METHODS.foldersList, folderService.list(), {

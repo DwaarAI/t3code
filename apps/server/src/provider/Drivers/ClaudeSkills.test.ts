@@ -67,6 +67,42 @@ it.layer(NodeServices.layer)("discoverClaudeSkills", (it) => {
     }),
   );
 
+  it.effect("publishes built-in plugin skills under the t3 namespace", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const tempDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-skills-" });
+      const configDir = path.join(tempDir, "claude-home");
+      const builtinRoots = path.join(tempDir, "t3-skills", "skills");
+
+      yield* writeSkill(
+        path.join(configDir, "skills"),
+        "reviewer",
+        ["---", "description: Personal reviewer.", "---"].join("\n"),
+      );
+      yield* writeSkill(
+        builtinRoots,
+        "reviewer",
+        ["---", "description: Built-in reviewer.", "---"].join("\n"),
+      );
+
+      const skills = yield* discoverClaudeSkills(
+        { homePath: configDir },
+        undefined,
+        undefined,
+        builtinRoots,
+      );
+
+      assert.deepEqual(
+        skills.map((skill) => [skill.name, skill.scope, skill.description]),
+        [
+          ["reviewer", "user", "Personal reviewer."],
+          ["t3:reviewer", "builtin", "Built-in reviewer."],
+        ],
+      );
+    }),
+  );
+
   it.effect("ignores .agents/skills, which Claude Code does not load", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

@@ -4958,6 +4958,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         supportedDialogKinds: ["resume_return"],
         env: McpProviderSession.withAgentDeviceEnvironment(claudeEnvironment, mcpSession),
         additionalDirectories,
+        // Built-in skills load as the `t3` plugin; T3 owns MCP wiring, so the
+        // plugin never brings servers of its own.
+        plugins: [{ type: "local", path: serverConfig.skillsDir, skipMcpDiscovery: true }],
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
           ? {
@@ -5260,6 +5263,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       claudeSettings,
       context.session.cwd,
       claudeEnvironment,
+      serverConfig.skillRootsDir,
     ).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),

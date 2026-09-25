@@ -7,7 +7,6 @@ import {
   ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
-import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { useCallback } from "react";
 
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
@@ -17,7 +16,8 @@ import { useEnvironmentFolders } from "../state/folders";
 import { useNewThreadHandler } from "./useHandleNewThread";
 
 const CODEX = ProviderDriverKind.make("codex");
-const REVIEW_GUIDE_FILE = "review.md";
+/** The server's built-in review skill, published under the `t3` plugin namespace. */
+const REVIEW_SKILL = "t3:dwaar-code-reviewer";
 
 /** A Codex instance that can take a turn now, on its default model. */
 export function pickReviewModel(providers: ReadonlyArray<ServerProvider>): ModelSelection | null {
@@ -46,8 +46,8 @@ type ReviewSource = Pick<
 
 /**
  * Review a thread's work in a fresh Codex session: a new draft in the same
- * worktree (or folder session), with the environment's `review.md` guide
- * attached and the branch's base named.
+ * worktree (or folder session) that invokes the built-in review skill and
+ * names the branch's base.
  */
 export function useStartReview() {
   const handleNewThread = useNewThreadHandler();
@@ -59,12 +59,16 @@ export function useStartReview() {
       const environment = environments.find(
         (entry) => entry.environmentId === thread.environmentId,
       );
-      if (!environment) {
+      const providers = serverConfigs.get(thread.environmentId)?.providers ?? [];
+      const hasReviewSkill = providers.some((provider) =>
+        provider.skills.some((skill) => skill.name === REVIEW_SKILL),
+      );
+      if (!environment || !hasReviewSkill) {
         toastManager.add(
           stackedThreadToast({
             type: "error",
             title: "Reviews need an updated server",
-            description: "This environment does not provide the shared review guide yet.",
+            description: `This environment does not provide the ${REVIEW_SKILL} skill yet.`,
           }),
         );
         return;
@@ -81,7 +85,7 @@ export function useStartReview() {
       if (!created) return;
 
       const store = useComposerDraftStore.getState();
-      const reviewModel = pickReviewModel(serverConfigs.get(thread.environmentId)?.providers ?? []);
+      const reviewModel = pickReviewModel(providers);
       if (reviewModel) {
         store.setModelSelection(created.draftId, reviewModel, {
           explicit: true,
@@ -95,10 +99,6 @@ export function useStartReview() {
         });
       }
 
-      const separator = environment.guidesDir.includes("\\") ? "\\" : "/";
-      const guide = serializeComposerFileLink(
-        `${environment.guidesDir}${separator}${REVIEW_GUIDE_FILE}`,
-      );
       const match = findFolderForThread(environment.folders, thread);
       const scope =
         match === null
@@ -106,7 +106,7 @@ export function useStartReview() {
           : match.member === null
             ? "Review the changes in each repository of this folder against its base branch (folder.json lists them)"
             : `Review the changes on this branch against origin/${match.member.baseBranch}`;
-      const request = `${scope}, following ${guide} `;
+      const request = `$${REVIEW_SKILL} ${scope}.`;
       const existing = store.getComposerDraft(created.draftId)?.prompt.trim() ?? "";
       store.setPrompt(created.draftId, existing ? `${request}\n\n${existing}` : request);
     },

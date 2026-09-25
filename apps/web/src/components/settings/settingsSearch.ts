@@ -16,6 +16,7 @@ export type SettingsPath =
   | "/settings/general"
   | "/settings/appearance"
   | "/settings/keybindings"
+  | "/settings/skills"
   | "/settings/snap-shot"
   | "/settings/providers"
   | "/settings/integrations"
@@ -85,6 +86,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/general": "General",
   "/settings/appearance": "Appearance",
   "/settings/keybindings": "Keybindings",
+  "/settings/skills": "Skills",
   "/settings/snap-shot": "SnapShots",
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
@@ -491,6 +493,12 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   ...KEYBINDING_SEARCH_ITEMS,
   {
+    id: "skills",
+    title: "Skills",
+    to: "/settings/skills",
+    searchTerms: ["skill.md agent claude codex import zip folder scripts t3 reviewer"],
+  },
+  {
     id: "snap-shot-enabled",
     title: "SnapShots",
     searchTerms: ["window capture screenshot"],
@@ -837,6 +845,8 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   // Keybindings fan out to the selection; Providers shows the representative
   // environment at any selection. Neither needs a particular scope to render.
   "/settings/keybindings": null,
+  // Lists every connected environment in the selection; no scope needed.
+  "/settings/skills": null,
   "/settings/providers": null,
   "/settings/integrations": null,
   "/settings/source-control": "environment-defaults",

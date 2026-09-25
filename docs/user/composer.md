@@ -159,6 +159,22 @@ Provider commands must start the message to run. T3 Code commands such as
 Send `/compact` in an existing conversation to reduce context usage when the
 provider supports it. Web and desktop also offer compaction from the context meter.
 
+### T3 Code skills
+
+T3 Code adds its own skills to Claude and Codex sessions under the `t3:` prefix, such as the
+built-in `$t3:dwaar-code-reviewer`. They live on the environment's machine, in the `skills`
+directory of your T3 Code home, and do not change your own Claude or Codex skill folders. Other
+providers do not get them yet.
+
+Manage them in **Settings → Skills**. Create a skill, or import a folder or `.zip` that holds a
+`SKILL.md`; its frontmatter needs a `description`, which tells the agent when to use it. Scripts
+that start with `#!` become executable. Built-in skills update with the server and cannot be
+edited, but **Duplicate** gives you a copy to change. Turning a skill off hides it from new
+chats without deleting it. On mobile, the environment's settings list its skills with the same
+switches.
+
+Skills load when a chat starts, so a chat already running keeps the skills it started with.
+
 ## Context in your message
 
 Context you attach lands where your cursor is, as a chip inside your text: a terminal excerpt,

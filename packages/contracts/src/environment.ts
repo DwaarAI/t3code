@@ -185,6 +185,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server exposes the `folders.*` RPCs that group feature worktrees across
       repositories. Absent on older servers, so clients hide folders. */
   folders: Schema.optionalKey(Schema.Boolean),
+  /** Server exposes the `skills.*` RPCs for managing custom skills. Absent on
+      older servers, so clients hide the Skills settings. */
+  skills: Schema.optionalKey(Schema.Boolean),
 });
 export type ExecutionEnvironmentCapabilities = typeof ExecutionEnvironmentCapabilities.Type;
 

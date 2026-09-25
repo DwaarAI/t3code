@@ -16,6 +16,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { useRemoteConnections } from "../../state/use-remote-environment-registry";
 import { ConnectionEnvironmentRow } from "../connection/ConnectionEnvironmentRow";
 import { SettingsActionRow } from "./components/SettingsActionRow";
+import { EnvironmentSkillsSection } from "./EnvironmentSkillsSection";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { SettingsSection } from "./components/SettingsSection";
 import {
@@ -331,6 +332,9 @@ function EnvironmentDetail({ environmentId }: { readonly environmentId: Environm
                       </View>
                     ))}
                 </SettingsSection>
+                {capabilities?.skills === true && connected ? (
+                  <EnvironmentSkillsSection environmentId={environmentId} disabled={disabled} />
+                ) : null}
               </>
             ) : null}
           </>

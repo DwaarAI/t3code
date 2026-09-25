@@ -162,6 +162,7 @@ import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderService from "./folder/FolderService.ts";
+import * as SkillService from "./skills/SkillService.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
@@ -543,6 +544,7 @@ const buildAppUnderTest = (options?: {
       ProjectSetupScriptRunner.ProjectSetupScriptRunner["Service"]
     >;
     folderService?: Partial<FolderService.FolderService["Service"]>;
+    skillService?: Partial<SkillService.SkillService["Service"]>;
     providerSessionDirectory?: Partial<
       ProviderSessionDirectory.ProviderSessionDirectory["Service"]
     >;
@@ -954,6 +956,9 @@ const buildAppUnderTest = (options?: {
           }),
           Layer.mock(FolderService.FolderService)({
             ...options?.layers?.folderService,
+          }),
+          Layer.mock(SkillService.SkillService)({
+            ...options?.layers?.skillService,
           }),
           WorktreeSetupTracker.layer,
           ProjectCloneTracker.layer.pipe(

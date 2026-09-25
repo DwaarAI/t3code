@@ -167,6 +167,10 @@
       "types": "./src/state/folders.ts",
       "default": "./src/state/folders.ts"
     },
+    "./state/skills": {
+      "types": "./src/state/skills.ts",
+      "default": "./src/state/skills.ts"
+    },
     "./state/providerSessionRef": {
       "types": "./src/state/providerSessionRef.ts",
       "default": "./src/state/providerSessionRef.ts"

@@ -233,7 +233,7 @@ describe("FolderService", () => {
 
         const listed = yield* service.list();
         expect(listed.folders.map((entry) => entry.slug)).toEqual(["auth-revamp"]);
-        expect(yield* fs.exists(path.join(listed.guidesDir, "review.md"))).toBe(true);
+        expect(yield* fs.exists(listed.guidesDir)).toBe(true);
 
         const duplicate = yield* service
           .create({ name: "auth revamp", members: [{ projectId: API, baseBranch: "main" }] })
