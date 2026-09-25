@@ -81,3 +81,45 @@ export function NotificationSettings() {
     />
   );
 }
+
+const REMINDER_MINUTE_OPTIONS = [0, 1, 2, 5, 10, 15, 30, 60];
+
+function reminderLabel(minutes: number) {
+  if (minutes === 0) return "Off";
+  return minutes === 1 ? "After 1 minute" : `After ${minutes} minutes`;
+}
+
+export function AttentionReminderSettings() {
+  const minutes = useScopedSettings((settings) => settings.attentionReminderMinutes);
+  const updateSettings = useUpdateScopedSettings();
+  const options = REMINDER_MINUTE_OPTIONS.includes(minutes)
+    ? REMINDER_MINUTE_OPTIONS
+    : [...REMINDER_MINUTE_OPTIONS, minutes].toSorted((a, b) => a - b);
+
+  return (
+    <SettingsRow
+      {...searchableSetting("attention-reminders")}
+      description="Alert again when an approval or question is still unanswered after this long. Uses the thread notification and in-app settings above."
+      control={
+        <Select
+          value={String(minutes)}
+          onValueChange={(value) => {
+            const next = Number(value);
+            if (Number.isInteger(next)) updateSettings({ attentionReminderMinutes: next });
+          }}
+        >
+          <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Unanswered reminders">
+            <SelectValue>{reminderLabel(minutes)}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {options.map((option) => (
+              <SelectItem key={option} hideIndicator value={String(option)}>
+                {reminderLabel(option)}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      }
+    />
+  );
+}

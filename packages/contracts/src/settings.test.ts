@@ -250,6 +250,20 @@ describe("ClientSettings notifications", () => {
     },
   );
 
+  it("reminds about unanswered requests after five minutes by default", () => {
+    expect(decodeClientSettings({}).attentionReminderMinutes).toBe(5);
+    expect(decodeClientSettings({ attentionReminderMinutes: 0 }).attentionReminderMinutes).toBe(0);
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("attentionReminderMinutes");
+  });
+
+  it.each([-1, 1.5, "5", null])(
+    "rejects an invalid reminder delay %s",
+    (attentionReminderMinutes) => {
+      expect(() => decodeClientSettings({ attentionReminderMinutes })).toThrow();
+      expect(() => decodeClientSettingsPatch({ attentionReminderMinutes })).toThrow();
+    },
+  );
+
   it.each(["off", "notifications", "sound", "notifications-and-sound"])(
     "round-trips the %s mode",
     (notificationMode) => {
