@@ -35,6 +35,8 @@ import { ConnectOnboardingRouteScreen } from "./features/cloud/ConnectOnboarding
 import { useConnectOnboardingNavigation } from "./features/cloud/connectOnboardingNavigation";
 import { AttachmentFileScreen } from "./features/files/AttachmentFileScreen";
 import { ThreadFilesTreeScreen, ThreadFileScreen } from "./features/files/ThreadFilesRouteScreen";
+import { FolderRouteScreen } from "./features/folders/FolderRouteScreen";
+import { FoldersRouteScreen } from "./features/folders/FoldersRouteScreen";
 import { AdaptiveWorkspaceLayout } from "./features/layout/AdaptiveWorkspaceLayout";
 import {
   HardwareKeyboardCommandOverlay,
@@ -621,6 +623,16 @@ const RootStackConfig = createNativeStackNavigator({
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
       },
+    }),
+    Folders: createNativeStackScreen({
+      screen: FoldersRouteScreen,
+      linking: "folders",
+      options: SOLID_HEADER_OPTIONS,
+    }),
+    Folder: createNativeStackScreen({
+      screen: FolderRouteScreen,
+      linking: "folders/:environmentId/:slug",
+      options: SOLID_HEADER_OPTIONS,
     }),
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,

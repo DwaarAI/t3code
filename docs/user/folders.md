@@ -4,8 +4,12 @@ A folder groups the work for one feature across repositories. It holds one workt
 repository on a shared branch, the threads working in those worktrees, and a `.context`
 directory the threads share for plans, todos, handoff notes, and review findings.
 
-Folders are available on web and desktop. The mobile app shows folder threads in its
-regular thread list.
+Create and manage folders on web and desktop. In the mobile app, the folder button on the
+home screen opens your folders, where you can see each folder's threads and start a new
+one in a repository's worktree or as a folder session. Folder threads also appear in the
+regular thread list. A thread started on mobile does not run the project's worktree setup
+script, so send the first message in a new folder worktree from web or desktop if the
+project needs one.
 
 ## Create a folder
 

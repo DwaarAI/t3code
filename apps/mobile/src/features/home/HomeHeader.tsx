@@ -1,7 +1,9 @@
 import { NativeHeaderToolbar, NativeStackScreenOptions } from "../../native/StackHeader";
+import { useNavigation } from "@react-navigation/native";
 import { useCallback, useRef } from "react";
 import type { SearchBarCommands } from "react-native-screens";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useFoldersSupported } from "../../state/folders";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import {
@@ -27,16 +29,30 @@ export function HomeHeader(props: HomeHeaderProps) {
   }, []);
   useHardwareKeyboardCommand("focusSearch", focusSearch);
   const filterMenu = buildHomeListFilterMenu(props);
+  const navigation = useNavigation();
+  const foldersSupported = useFoldersSupported();
 
   return (
     <>
       <NativeStackScreenOptions
-        optionsVersion={filterMenu.items}
+        optionsVersion={[filterMenu.items, foldersSupported]}
         options={{
           // Static header config (glass, title, fonts) lives in Stack.tsx
           // (GLASS_HEADER_OPTIONS). Only dynamic values are set here.
           headerTintColor: iconColor,
           unstable_headerRightItems: () => [
+            ...(foldersSupported
+              ? [
+                  withNativeGlassHeaderItem({
+                    accessibilityLabel: "Open folders",
+                    icon: { name: "folder", type: "sfSymbol" } as const,
+                    identifier: "home-folders",
+                    label: "",
+                    onPress: () => navigation.navigate("Folders"),
+                    type: "button",
+                  }),
+                ]
+              : []),
             withNativeGlassHeaderItem({
               accessibilityLabel: "Open settings",
               icon: { name: "ellipsis", type: "sfSymbol" } as const,
