@@ -1,0 +1,138 @@
+name: Dwaar test build
+
+# One-off installable builds for manual testing: an Android APK (preview
+# variant, debug-signed, OTA updates off) and an unsigned Apple Silicon DMG,
+# attached to a GitHub prerelease.
+
+on:
+  push:
+    branches:
+      - build/**
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      APP_VARIANT: preview
+      T3CODE_MOBILE_UPDATES_ENABLED: "0"
+      EXPO_NO_GIT_STATUS: "1"
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/mobile...
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Public configuration
+        run: cp .env.example .env
+
+      - name: Prebuild
+        working-directory: apps/mobile
+        run: ./node_modules/.bin/expo prebuild --clean --platform android --no-install
+
+      - name: Assemble release APK
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "out/t3code-dwaar-preview-arm64.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-apk
+          path: out/*.apk
+          if-no-files-found: error
+
+  macos:
+    name: macOS DMG (Apple Silicon)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /*
+            !/.repos/
+          sparse-checkout-cone-mode: false
+
+      - uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=@t3tools/desktop...
+              - --filter=@t3tools/web...
+              - --filter=t3...
+              - --filter=@t3tools/scripts...
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Public configuration
+        run: cp .env.example .env
+
+      - name: Build JS bundle
+        run: vp run build:desktop
+
+      - name: Package DMG
+        run: vp run dist:desktop:artifact --platform mac --target dmg --arch arm64 --skip-build --verbose
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-dmg
+          path: release/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish prerelease
+    needs: [android, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          short_sha="${GITHUB_SHA::9}"
+          tag="dwaar-test-${short_sha}"
+          gh release create "$tag" assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Dwaar test build: ${GITHUB_REF_NAME} ${short_sha}" \
+            --notes "Test build of \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA}.
+
+          - **Android:** \`t3code-dwaar-preview-arm64.apk\`, the preview variant (installs as \"T3 Code Preview\" beside the store app). It's debug-signed and has over-the-air updates turned off.
+          - **macOS:** the \`.dmg\` is for Apple Silicon and is unsigned. After copying the app to Applications, run \`xattr -dr com.apple.quarantine \"/Applications/<app name>.app\"\` once before opening it."
