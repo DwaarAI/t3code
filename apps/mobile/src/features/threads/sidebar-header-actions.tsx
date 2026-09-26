@@ -1,5 +1,8 @@
-import { SymbolView } from "../../components/AppSymbol";
+import { useNavigation } from "@react-navigation/native";
 import { Pressable, View } from "react-native";
+
+import { SymbolView } from "../../components/AppSymbol";
+import { useFoldersSupported } from "../../state/folders";
 
 export interface SidebarHeaderActionsProps {
   readonly onOpenSettings: () => void;
@@ -7,7 +10,7 @@ export interface SidebarHeaderActionsProps {
 
 function FallbackHeaderButton(props: {
   readonly accessibilityLabel: string;
-  readonly icon: "gearshape" | "square.and.pencil";
+  readonly icon: "folder" | "gearshape" | "square.and.pencil";
   readonly onPress: () => void;
 }) {
   return (
@@ -29,8 +32,17 @@ function FallbackHeaderButton(props: {
 }
 
 export function SidebarHeaderActions(props: SidebarHeaderActionsProps) {
+  const navigation = useNavigation();
+  const foldersSupported = useFoldersSupported();
   return (
     <View className="flex-row items-center gap-0.5">
+      {foldersSupported ? (
+        <FallbackHeaderButton
+          accessibilityLabel="Open folders"
+          icon="folder"
+          onPress={() => navigation.navigate("Folders")}
+        />
+      ) : null}
       <FallbackHeaderButton
         accessibilityLabel="Open settings"
         icon="gearshape"

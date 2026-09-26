@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps } from "r
 import { BackHandler, Keyboard, type TextInput, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MenuAction } from "@react-native-menu/menu";
+import { useNavigation } from "@react-navigation/native";
 
 import { AndroidHeaderIconButton } from "../../components/AndroidScreenHeader";
 import { CompactBrandTitle } from "../../components/CompactBrandTitle";
@@ -11,6 +12,7 @@ import { ControlPillMenu } from "../../components/ControlPill";
 import { MaterialSearchField } from "../../components/MaterialSearchField";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
 import { WorkspaceConnectionTitle } from "./WorkspaceConnectionTitle";
+import { useFoldersSupported } from "../../state/folders";
 import { useWorkspaceState } from "../../state/workspace";
 import { useMaterialToolbarHeight } from "../../components/useMaterialToolbarHeight";
 
@@ -30,6 +32,8 @@ export function MaterialThreadListToolbar(props: {
   const insets = useSafeAreaInsets();
   const toolbarHeight = useMaterialToolbarHeight();
   const { state } = useWorkspaceState();
+  const navigation = useNavigation();
+  const foldersSupported = useFoldersSupported();
   const { onRequestVisibility, onSearchQueryChange } = props;
   const searchRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -107,6 +111,13 @@ export function MaterialThreadListToolbar(props: {
                 icon="magnifyingglass"
                 onPress={openSearch}
               />
+              {foldersSupported ? (
+                <AndroidHeaderIconButton
+                  accessibilityLabel="Open folders"
+                  icon="folder"
+                  onPress={() => navigation.navigate("Folders")}
+                />
+              ) : null}
               <AndroidHeaderIconButton
                 accessibilityLabel="Open settings"
                 icon="gearshape"
