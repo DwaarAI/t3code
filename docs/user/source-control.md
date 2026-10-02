@@ -180,3 +180,16 @@ the scope and merge strategy. GitHub rebases the remaining stack after merging.
 It can rewrite history and restart checks. If a layer fails, earlier updates remain; resolve that
 layer before retrying. GitHub may require manual conflict resolution after a lower layer is amended,
 even when its changes look independent. Stack actions require an environment that supports them.
+
+## GitHub Actions
+
+Open **GitHub Actions** from the right panel (**G** in the empty panel, or the **+** menu) to see
+the workflow runs for the branch the thread is working on. The panel shows the latest run of each
+workflow by default; switch to all runs to see history. Runs refresh while the panel is open. From a
+run's menu you can open it on GitHub, cancel it, or re-run all or only the failed jobs.
+
+**Run a workflow** lists the branch's workflows that declare `workflow_dispatch`, read from its
+`.github/workflows` directory. Running one asks for its inputs and starts it on the branch as it is
+on GitHub, so push your commits first. Runs and dispatches go to the repository the branch is pushed
+to, which is the fork when you work from one. They use the server's `gh` login, which needs write
+access to that repository to start, cancel, or re-run workflows.

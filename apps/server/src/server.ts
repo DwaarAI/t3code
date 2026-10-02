@@ -117,6 +117,7 @@ import * as FolderGitHub from "./folder/FolderGitHub.ts";
 import * as FolderIssueSync from "./folder/FolderIssueSync.ts";
 import * as FolderPlanSync from "./folder/FolderPlanSync.ts";
 import * as FolderService from "./folder/FolderService.ts";
+import * as GitHubActions from "./githubActions/GitHubActions.ts";
 import * as SkillService from "./skills/SkillService.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability.ts";
@@ -559,6 +560,7 @@ const FolderLayerLive = Layer.mergeAll(
   FolderIssueSync.layer,
   FolderPlanSync.layer,
   SkillService.layer,
+  GitHubActions.layer,
 ).pipe(Layer.provideMerge(FolderService.layer), Layer.provideMerge(FolderGitHub.layer));
 
 const RuntimeDependenciesLive = FolderLayerLive.pipe(
