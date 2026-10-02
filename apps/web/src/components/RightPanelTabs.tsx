@@ -15,6 +15,7 @@ import type {
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
   Bot,
+  CirclePlay,
   Smartphone,
   ChevronDown,
   ChevronLeft,
@@ -123,6 +124,9 @@ interface RightPanelTabsProps {
   onAddPullRequests: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
+  /** Absent where the panel has no workspace branch, which hides Actions. */
+  onAddGitHubActions?: (() => void) | undefined;
+  githubActionsAvailable?: boolean | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -161,6 +165,7 @@ const SURFACE_DISABLED_REASONS = {
   pullRequest: "This thread's branch has no pull request yet.",
   pullRequests: "No linked pull requests are available for this thread.",
   agents: "Agents are only available from a thread.",
+  githubActions: "GitHub Actions are only available for Git repositories on GitHub servers.",
   device: "Devices are only available from a thread.",
 } as const;
 
@@ -185,6 +190,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
   agents: "Available from a thread.",
+  githubActions: "Available for Git repositories.",
   device: "Available from a thread.",
 } as const;
 
@@ -326,6 +332,9 @@ function RightPanelEmptyState(props: {
   onAddPullRequests: () => void;
   onAddAgents: () => void;
   onAddDevice: () => void;
+  /** Absent where the panel has no workspace branch, which hides Actions. */
+  onAddGitHubActions?: (() => void) | undefined;
+  githubActionsAvailable?: boolean | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -402,6 +411,15 @@ function RightPanelEmptyState(props: {
       disabledReason: SURFACE_UNAVAILABLE_HINTS.agents,
       onClick: props.onAddAgents,
       badgeCount: props.liveAgentCount,
+    },
+    {
+      label: "GitHub Actions",
+      icon: CirclePlay,
+      shortcut: "G",
+      available: props.githubActionsAvailable === true,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.githubActions,
+      onClick: props.onAddGitHubActions ?? (() => undefined),
+      badgeCount: 0,
     },
     {
       label: "Device",
@@ -630,6 +648,8 @@ function surfaceTitle(
       return "Pull requests";
     case "agents":
       return "Agents";
+    case "github-actions":
+      return "Actions";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
     case "preview": {
@@ -715,6 +735,8 @@ function SurfaceIcon({
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
     case "agents":
       return <Bot className="size-3 shrink-0" />;
+    case "github-actions":
+      return <CirclePlay className="size-3 shrink-0" />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -924,6 +946,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.agentsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.agents,
       onClick: props.onAddAgents,
+    },
+    {
+      label: "GitHub Actions",
+      icon: CirclePlay,
+      shortcut: "G",
+      available: props.githubActionsAvailable === true,
+      disabledReason: SURFACE_DISABLED_REASONS.githubActions,
+      onClick: props.onAddGitHubActions ?? (() => undefined),
     },
     {
       label: "Device",
@@ -1414,6 +1444,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
             onAddAgents={props.onAddAgents}
+            onAddGitHubActions={props.onAddGitHubActions}
             onAddDevice={props.onAddDevice}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
@@ -1422,6 +1453,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             pullRequestAvailable={props.pullRequestAvailable}
             pullRequestsAvailable={props.pullRequestsAvailable}
             agentsAvailable={props.agentsAvailable}
+            githubActionsAvailable={props.githubActionsAvailable}
             deviceAvailable={props.deviceAvailable}
             liveAgentCount={props.liveAgentCount}
           />

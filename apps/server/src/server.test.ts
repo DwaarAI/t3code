@@ -162,6 +162,7 @@ import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderService from "./folder/FolderService.ts";
+import * as GitHubActions from "./githubActions/GitHubActions.ts";
 import * as SkillService from "./skills/SkillService.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
@@ -960,6 +961,7 @@ const buildAppUnderTest = (options?: {
           Layer.mock(SkillService.SkillService)({
             ...options?.layers?.skillService,
           }),
+          Layer.mock(GitHubActions.GitHubActions)({}),
           WorktreeSetupTracker.layer,
           ProjectCloneTracker.layer.pipe(
             Layer.provide(

@@ -124,6 +124,10 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.foldersDelete]: AuthOrchestrationOperateScope,
   [WS_METHODS.foldersCopyEnvFiles]: AuthOrchestrationOperateScope,
   [WS_METHODS.foldersOpenRoot]: AuthOrchestrationOperateScope,
+  [WS_METHODS.githubActionsList]: AuthOrchestrationReadScope,
+  [WS_METHODS.githubActionsDispatch]: AuthOrchestrationOperateScope,
+  [WS_METHODS.githubActionsCancel]: AuthOrchestrationOperateScope,
+  [WS_METHODS.githubActionsRerun]: AuthOrchestrationOperateScope,
   [WS_METHODS.skillsList]: AuthOrchestrationReadScope,
   [WS_METHODS.skillsGet]: AuthOrchestrationReadScope,
   // Skill scripts run on this machine inside agent sessions, so writing them

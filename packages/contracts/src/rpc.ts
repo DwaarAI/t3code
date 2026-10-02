@@ -17,6 +17,14 @@ import {
   FoldersListResult,
 } from "./folder.ts";
 import {
+  GitHubActionsDispatchInput,
+  GitHubActionsError,
+  GitHubActionsListResult,
+  GitHubActionsRerunInput,
+  GitHubActionsRunInput,
+  GitHubActionsTargetInput,
+} from "./githubActions.ts";
+import {
   SkillError,
   SkillRefInput,
   SkillResult,
@@ -325,6 +333,10 @@ export const WS_METHODS = {
   foldersDelete: "folders.delete",
   foldersCopyEnvFiles: "folders.copyEnvFiles",
   foldersOpenRoot: "folders.openRoot",
+  githubActionsList: "githubActions.list",
+  githubActionsDispatch: "githubActions.dispatch",
+  githubActionsCancel: "githubActions.cancel",
+  githubActionsRerun: "githubActions.rerun",
 
   // Skill methods
   skillsList: "skills.list",
@@ -1115,6 +1127,29 @@ const WsFoldersWriteHandoffRpc = Rpc.make(WS_METHODS.foldersWriteHandoff, {
   error: FolderRpcError,
 });
 
+const GitHubActionsRpcError = Schema.Union([GitHubActionsError, EnvironmentAuthorizationError]);
+
+const WsGitHubActionsListRpc = Rpc.make(WS_METHODS.githubActionsList, {
+  payload: GitHubActionsTargetInput,
+  success: GitHubActionsListResult,
+  error: GitHubActionsRpcError,
+});
+
+const WsGitHubActionsDispatchRpc = Rpc.make(WS_METHODS.githubActionsDispatch, {
+  payload: GitHubActionsDispatchInput,
+  error: GitHubActionsRpcError,
+});
+
+const WsGitHubActionsCancelRpc = Rpc.make(WS_METHODS.githubActionsCancel, {
+  payload: GitHubActionsRunInput,
+  error: GitHubActionsRpcError,
+});
+
+const WsGitHubActionsRerunRpc = Rpc.make(WS_METHODS.githubActionsRerun, {
+  payload: GitHubActionsRerunInput,
+  error: GitHubActionsRpcError,
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1642,6 +1677,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsFoldersDeleteRpc,
   WsFoldersCopyEnvFilesRpc,
   WsFoldersOpenRootRpc,
+  WsGitHubActionsListRpc,
+  WsGitHubActionsDispatchRpc,
+  WsGitHubActionsCancelRpc,
+  WsGitHubActionsRerunRpc,
   WsSkillsListRpc,
   WsSkillsGetRpc,
   WsSkillsSaveRpc,

@@ -143,6 +143,7 @@ import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderService from "./folder/FolderService.ts";
+import * as GitHubActions from "./githubActions/GitHubActions.ts";
 import * as SkillService from "./skills/SkillService.ts";
 import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
@@ -620,6 +621,7 @@ const makeWsRpcLayer = (
       });
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const folderService = yield* FolderService.FolderService;
+      const githubActions = yield* GitHubActions.GitHubActions;
       const skillService = yield* SkillService.SkillService;
       // Claude and Codex list skills when probed; re-probe after a skill
       // changes so `$` pickers catch up without holding the RPC open.
@@ -3180,6 +3182,26 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.foldersWriteHandoff, folderService.writeHandoff(input), {
             "rpc.aggregate": "folder",
           }),
+        [WS_METHODS.githubActionsList]: (input) =>
+          observeRpcEffect(WS_METHODS.githubActionsList, githubActions.list(input.cwd), {
+            "rpc.aggregate": "github-actions",
+          }),
+        [WS_METHODS.githubActionsDispatch]: (input) =>
+          observeRpcEffect(WS_METHODS.githubActionsDispatch, githubActions.dispatch(input), {
+            "rpc.aggregate": "github-actions",
+          }),
+        [WS_METHODS.githubActionsCancel]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubActionsCancel,
+            githubActions.cancel(input.cwd, input.runId),
+            { "rpc.aggregate": "github-actions" },
+          ),
+        [WS_METHODS.githubActionsRerun]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.githubActionsRerun,
+            githubActions.rerun(input.cwd, input.runId, input.failedOnly),
+            { "rpc.aggregate": "github-actions" },
+          ),
         [WS_METHODS.projectsSearchEntries]: (input) =>
           observeRpcEffect(
             WS_METHODS.projectsSearchEntries,
