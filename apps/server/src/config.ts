@@ -52,7 +52,6 @@ export interface ServerDerivedPaths {
   /** Screenshots the agent asks the collaborative browser to keep for the user. */
   readonly browserArtifactsDir: string;
   readonly logsDir: string;
-  readonly serverLogPath: string;
   readonly serverTracePath: string;
   readonly providerLogsDir: string;
   readonly providerEventLogPath: string;
@@ -90,7 +89,6 @@ export class ServerConfig extends Context.Service<
     readonly otlpTracesExport: SignalExport;
     readonly otlpMetricsExport: SignalExport;
     readonly otlpLogsExport: SignalExport;
-    readonly otlpServiceName: string;
     readonly otelEnvironment: OtelEnvironment.OtelEnvironment;
     readonly mode: RuntimeMode;
     readonly port: number;
@@ -127,8 +125,9 @@ export const make = (config: ServerConfig["Service"]) => ServerConfig.of(config)
  * logs report the same service identity to the collector.
  */
 export const otlpResource = (config: ServerConfig["Service"]) => ({
-  serviceName: config.otlpServiceName,
+  serviceName: "t3code-server",
   attributes: {
+    "service.namespace": "t3code",
     "service.runtime": "t3-server",
     "service.mode": config.mode,
   },
@@ -166,7 +165,6 @@ export const deriveServerPaths = Effect.fn(function* (
     attachmentsDir,
     browserArtifactsDir: join(stateDir, "browser-artifacts"),
     logsDir,
-    serverLogPath: join(logsDir, "server.log"),
     serverTracePath: join(logsDir, "server.trace.ndjson"),
     providerLogsDir,
     providerEventLogPath: join(providerLogsDir, "events.log"),
@@ -235,7 +233,6 @@ const makeTest = Effect.fn("ServerConfig.makeTest")(function* (
     otlpTracesExport: DEFAULT_SIGNAL_EXPORT,
     otlpMetricsExport: DEFAULT_SIGNAL_EXPORT,
     otlpLogsExport: DEFAULT_SIGNAL_EXPORT,
-    otlpServiceName: "t3-server",
     otelEnvironment: OtelEnvironment.none,
     cwd,
     baseDir,
