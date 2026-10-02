@@ -22,6 +22,7 @@ import {
   type FolderDeleteResult,
   type FolderRefInput,
   type FolderSetIssueStatusInput,
+  type FolderJiraIssueInput,
   type FoldersListResult,
   ProjectId,
 } from "@t3tools/contracts";
@@ -86,6 +87,9 @@ export class FolderService extends Context.Service<
     readonly writeHandoff: (
       input: FolderHandoffInput,
     ) => Effect.Effect<FolderHandoffResult, FolderError>;
+    /** Records a Jira ticket on the folder; attaching one twice is a no-op. */
+    readonly attachJiraIssue: (input: FolderJiraIssueInput) => Effect.Effect<Folder, FolderError>;
+    readonly detachJiraIssue: (input: FolderJiraIssueInput) => Effect.Effect<Folder, FolderError>;
   }
 >()("t3/folder/FolderService") {}
 
@@ -873,6 +877,25 @@ export const make = Effect.gen(function* () {
       return { path: filePath };
     });
 
+  const attachJiraIssue: FolderService["Service"]["attachJiraIssue"] = (input) =>
+    mutation.withPermits(1)(
+      Effect.gen(function* () {
+        const manifest = yield* readManifest(input.slug);
+        const current = manifest.jiraIssues ?? [];
+        if (current.includes(input.key)) return yield* writeManifest(manifest);
+        return yield* writeManifest({ ...manifest, jiraIssues: [...current, input.key] });
+      }),
+    );
+
+  const detachJiraIssue: FolderService["Service"]["detachJiraIssue"] = (input) =>
+    mutation.withPermits(1)(
+      Effect.gen(function* () {
+        const manifest = yield* readManifest(input.slug);
+        const remaining = (manifest.jiraIssues ?? []).filter((key) => key !== input.key);
+        return yield* writeManifest({ ...manifest, jiraIssues: remaining });
+      }),
+    );
+
   return FolderService.of({
     list,
     create,
@@ -886,6 +909,8 @@ export const make = Effect.gen(function* () {
     copyEnvFiles,
     openRoot,
     writeHandoff,
+    attachJiraIssue,
+    detachJiraIssue,
   });
 });
 

@@ -54,6 +54,8 @@ export function createFolderEnvironmentAtoms<R, E>(
     delete: mutation(WS_METHODS.foldersDelete, "delete"),
     copyEnvFiles: mutation(WS_METHODS.foldersCopyEnvFiles, "copy-env-files"),
     openRoot: mutation(WS_METHODS.foldersOpenRoot, "open-root"),
+    attachJiraIssue: mutation(WS_METHODS.foldersAttachJiraIssue, "attach-jira-issue"),
+    detachJiraIssue: mutation(WS_METHODS.foldersDetachJiraIssue, "detach-jira-issue"),
     writeHandoff: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:folders:write-handoff",
       tag: WS_METHODS.foldersWriteHandoff,
@@ -71,7 +73,9 @@ type MutationTag =
   | typeof WS_METHODS.foldersSetIssueStatus
   | typeof WS_METHODS.foldersDelete
   | typeof WS_METHODS.foldersCopyEnvFiles
-  | typeof WS_METHODS.foldersOpenRoot;
+  | typeof WS_METHODS.foldersOpenRoot
+  | typeof WS_METHODS.foldersAttachJiraIssue
+  | typeof WS_METHODS.foldersDetachJiraIssue;
 
 export interface FolderWorktreeMatch {
   readonly folder: Folder;

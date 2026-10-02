@@ -163,6 +163,7 @@ import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderService from "./folder/FolderService.ts";
 import * as GitHubActions from "./githubActions/GitHubActions.ts";
+import * as JiraService from "./jira/JiraService.ts";
 import * as SkillService from "./skills/SkillService.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
@@ -962,6 +963,7 @@ const buildAppUnderTest = (options?: {
             ...options?.layers?.skillService,
           }),
           Layer.mock(GitHubActions.GitHubActions)({}),
+          Layer.mock(JiraService.JiraService)({}),
           WorktreeSetupTracker.layer,
           ProjectCloneTracker.layer.pipe(
             Layer.provide(

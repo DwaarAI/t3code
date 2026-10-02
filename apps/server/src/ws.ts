@@ -68,6 +68,7 @@ import {
   AssetWorkspaceContextResolutionError,
   RpcClientId,
   EnvironmentAuthorizationError,
+  FolderError,
   ProviderSessionRefError,
   ThreadId,
   type TerminalAttachStreamEvent,
@@ -144,6 +145,7 @@ import * as ReviewService from "./review/ReviewService.ts";
 import * as ProjectSetupScriptRunner from "./project/ProjectSetupScriptRunner.ts";
 import * as FolderService from "./folder/FolderService.ts";
 import * as GitHubActions from "./githubActions/GitHubActions.ts";
+import * as JiraService from "./jira/JiraService.ts";
 import * as SkillService from "./skills/SkillService.ts";
 import * as ProjectCloneTracker from "./project/ProjectCloneTracker.ts";
 import * as RepositoryIdentityResolver from "./project/RepositoryIdentityResolver.ts";
@@ -622,6 +624,7 @@ const makeWsRpcLayer = (
       const projectSetupScriptRunner = yield* ProjectSetupScriptRunner.ProjectSetupScriptRunner;
       const folderService = yield* FolderService.FolderService;
       const githubActions = yield* GitHubActions.GitHubActions;
+      const jira = yield* JiraService.JiraService;
       const skillService = yield* SkillService.SkillService;
       // Claude and Codex list skills when probed; re-probe after a skill
       // changes so `$` pickers catch up without holding the RPC open.
@@ -3201,6 +3204,65 @@ const makeWsRpcLayer = (
             WS_METHODS.githubActionsRerun,
             githubActions.rerun(input.cwd, input.runId, input.failedOnly),
             { "rpc.aggregate": "github-actions" },
+          ),
+        [WS_METHODS.foldersAttachJiraIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersAttachJiraIssue,
+            // Only tickets the server's Jira login can read are attached.
+            jira.summaries([input.key]).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new FolderError({ reason: "invalid_input", detail: cause.message, cause }),
+              ),
+              Effect.flatMap((found) =>
+                found.length === 0
+                  ? Effect.fail(
+                      new FolderError({
+                        reason: "not_found",
+                        detail: `Jira ticket ${input.key} was not found.`,
+                      }),
+                    )
+                  : folderService.attachJiraIssue(input),
+              ),
+              Effect.map((folder) => ({ folder })),
+            ),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.foldersDetachJiraIssue]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.foldersDetachJiraIssue,
+            folderService.detachJiraIssue(input).pipe(Effect.map((folder) => ({ folder }))),
+            { "rpc.aggregate": "folder" },
+          ),
+        [WS_METHODS.jiraStatus]: () =>
+          observeRpcEffect(WS_METHODS.jiraStatus, jira.status(), { "rpc.aggregate": "jira" }),
+        [WS_METHODS.jiraConfigure]: (input) =>
+          observeRpcEffect(WS_METHODS.jiraConfigure, jira.configure(input), {
+            "rpc.aggregate": "jira",
+          }),
+        [WS_METHODS.jiraSearch]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.jiraSearch,
+            jira.search(input.query).pipe(Effect.map((issues) => ({ issues }))),
+            { "rpc.aggregate": "jira" },
+          ),
+        [WS_METHODS.jiraGetIssue]: (input) =>
+          observeRpcEffect(WS_METHODS.jiraGetIssue, jira.getIssue(input.key), {
+            "rpc.aggregate": "jira",
+          }),
+        [WS_METHODS.jiraUpdateIssue]: (input) =>
+          observeRpcEffect(WS_METHODS.jiraUpdateIssue, jira.updateIssue(input), {
+            "rpc.aggregate": "jira",
+          }),
+        [WS_METHODS.jiraAddComment]: (input) =>
+          observeRpcEffect(WS_METHODS.jiraAddComment, jira.addComment(input.key, input.body), {
+            "rpc.aggregate": "jira",
+          }),
+        [WS_METHODS.jiraTransition]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.jiraTransition,
+            jira.transition(input.key, input.transitionId),
+            { "rpc.aggregate": "jira" },
           ),
         [WS_METHODS.projectsSearchEntries]: (input) =>
           observeRpcEffect(

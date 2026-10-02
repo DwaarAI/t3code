@@ -188,6 +188,9 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   /** Server exposes the `githubActions.*` RPCs: a branch's workflow runs and
       manual triggers. Absent on older servers, so clients hide Actions. */
   githubActions: Schema.optionalKey(Schema.Boolean),
+  /** Server exposes the `jira.*` RPCs and Jira tickets on folders. Absent on
+      older servers, so clients hide Jira. */
+  jira: Schema.optionalKey(Schema.Boolean),
   /** Server exposes the `skills.*` RPCs for managing custom skills. Absent on
       older servers, so clients hide the Skills settings. */
   skills: Schema.optionalKey(Schema.Boolean),

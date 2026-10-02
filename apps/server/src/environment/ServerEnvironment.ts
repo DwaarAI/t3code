@@ -244,6 +244,7 @@ export const make = Effect.gen(function* () {
       projectCloneTracking: true,
       folders: true,
       githubActions: true,
+      jira: true,
       skills: true,
       ...(serverSelfUpdate === null ? {} : { serverSelfUpdate }),
       ...(serverSelfUpdate === "boot-service" || desktopAppUpdate

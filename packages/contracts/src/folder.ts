@@ -8,6 +8,7 @@ import {
   ThreadId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
+import { JiraIssueKey } from "./jira.ts";
 
 /**
  * A folder groups the worktrees of one feature across repositories. It is a
@@ -80,6 +81,8 @@ export const FolderManifest = Schema.Struct({
    * every repository. Created the first time one is opened.
    */
   rootProjectId: Schema.optional(ProjectId),
+  /** Jira tickets attached to the folder, in the order they were attached. */
+  jiraIssues: Schema.optional(Schema.Array(JiraIssueKey)),
 });
 export type FolderManifest = typeof FolderManifest.Type;
 
@@ -158,6 +161,12 @@ export const FolderHandoffResult = Schema.Struct({
   path: TrimmedNonEmptyString,
 });
 export type FolderHandoffResult = typeof FolderHandoffResult.Type;
+
+export const FolderJiraIssueInput = Schema.Struct({
+  slug: FolderSlug,
+  key: JiraIssueKey,
+});
+export type FolderJiraIssueInput = typeof FolderJiraIssueInput.Type;
 
 export const FolderErrorReason = Schema.Literals([
   "not_found",

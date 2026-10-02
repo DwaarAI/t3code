@@ -59,6 +59,7 @@ import {
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
 import { FolderIssueSettingsSection } from "./FolderIssueSettings";
+import { JiraSettingsSection } from "./JiraSettings";
 import {
   PolicyTooltip,
   SettingResetButton,
@@ -604,6 +605,7 @@ export function SourceControlSettingsPanel() {
 
       <SourceControlWritingSettingsSection />
       <FolderIssueSettingsSection />
+      <JiraSettingsSection />
     </SettingsPageContainer>
   );
 }
