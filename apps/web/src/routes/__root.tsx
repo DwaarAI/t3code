@@ -20,6 +20,7 @@ import { AppSidebarLayout } from "../components/AppSidebarLayout";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
 import { CreateFolderDialogHost } from "../components/folders/CreateFolderDialog";
+import { JiraTicketsDialogHost } from "../components/jira/JiraTicketsDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
 import { FirstRunGate } from "../components/onboarding/FirstRunGate";
 import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDialog";
@@ -176,6 +177,7 @@ function RootRouteView() {
           <FontAppearanceSync />
           <CustomSnoozeDialogHost />
           <CreateFolderDialogHost />
+          <JiraTicketsDialogHost />
           <CommandPalette>
             <AppSidebarLayout>
               <Outlet />
@@ -229,6 +231,7 @@ function RootRouteView() {
           <ConfirmDialogHost />
           <CustomSnoozeDialogHost />
           <CreateFolderDialogHost />
+          <JiraTicketsDialogHost />
           <SlowRpcRequestToastCoordinator />
           <ProjectCloneToastCoordinator />
           <HostedStaticEnvironmentBootstrap />

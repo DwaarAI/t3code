@@ -175,6 +175,10 @@
       "types": "./src/state/githubActions.ts",
       "default": "./src/state/githubActions.ts"
     },
+    "./state/jira": {
+      "types": "./src/state/jira.ts",
+      "default": "./src/state/jira.ts"
+    },
     "./state/skills": {
       "types": "./src/state/skills.ts",
       "default": "./src/state/skills.ts"

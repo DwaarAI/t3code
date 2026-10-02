@@ -140,6 +140,22 @@ and `name` to the issue number and title. Each repository must already be a proj
 Code. GitHub access uses the GitHub CLI signed in on the machine running T3 Code; see
 [source control](./source-control.md#github).
 
+## Attach Jira tickets
+
+Connect Jira Cloud once per server in **Settings → Source control → Jira** with your site URL,
+account email, and an API token from id.atlassian.com → Security → API tokens. T3 Code checks the
+login before saving it.
+
+Choose **Jira tickets…** from a folder's menu to attach tickets: search by key, text, or JQL, then
+**Attach**. Selecting a ticket shows its description, sub-tickets and comments. From there you can
+edit the summary, labels and description, change the status, and comment. Descriptions and comments
+are edited as Markdown; Jira formatting that Markdown cannot express, such as tables or panels, is
+replaced when you save a description. Attached tickets appear as **Jira tickets** under the folder.
+
+Agents in a folder can read its tickets with the `t3-code` tools, and the built-in `$t3:jira-tickets`
+skill tells them to use the tickets as requirements when planning, building, testing, and reviewing.
+Agents comment or change a ticket's status only when you ask them to.
+
 ## Archive and restore
 
 Choose **Archive worktree** from a repository's menu, or **Archive folder** from the folder's

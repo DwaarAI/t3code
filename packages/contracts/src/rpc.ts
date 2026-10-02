@@ -8,6 +8,7 @@ import {
   FolderError,
   FolderHandoffInput,
   FolderHandoffResult,
+  FolderJiraIssueInput,
   FolderMemberRefInput,
   FolderRefInput,
   FolderDeleteResult,
@@ -24,6 +25,20 @@ import {
   GitHubActionsRunInput,
   GitHubActionsTargetInput,
 } from "./githubActions.ts";
+import {
+  JiraAddCommentInput,
+  JiraComment,
+  JiraConfigureInput,
+  JiraConnection,
+  JiraError,
+  JiraIssueDetail,
+  JiraIssueRefInput,
+  JiraSearchInput,
+  JiraSearchResult,
+  JiraStatusInput,
+  JiraTransitionInput,
+  JiraUpdateIssueInput,
+} from "./jira.ts";
 import {
   SkillError,
   SkillRefInput,
@@ -337,6 +352,15 @@ export const WS_METHODS = {
   githubActionsDispatch: "githubActions.dispatch",
   githubActionsCancel: "githubActions.cancel",
   githubActionsRerun: "githubActions.rerun",
+  foldersAttachJiraIssue: "folders.attachJiraIssue",
+  foldersDetachJiraIssue: "folders.detachJiraIssue",
+  jiraStatus: "jira.status",
+  jiraConfigure: "jira.configure",
+  jiraSearch: "jira.search",
+  jiraGetIssue: "jira.getIssue",
+  jiraUpdateIssue: "jira.updateIssue",
+  jiraAddComment: "jira.addComment",
+  jiraTransition: "jira.transition",
 
   // Skill methods
   skillsList: "skills.list",
@@ -1150,6 +1174,62 @@ const WsGitHubActionsRerunRpc = Rpc.make(WS_METHODS.githubActionsRerun, {
   error: GitHubActionsRpcError,
 });
 
+const WsFoldersAttachJiraIssueRpc = Rpc.make(WS_METHODS.foldersAttachJiraIssue, {
+  payload: FolderJiraIssueInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const WsFoldersDetachJiraIssueRpc = Rpc.make(WS_METHODS.foldersDetachJiraIssue, {
+  payload: FolderJiraIssueInput,
+  success: FolderResult,
+  error: FolderRpcError,
+});
+
+const JiraRpcError = Schema.Union([JiraError, EnvironmentAuthorizationError]);
+
+const WsJiraStatusRpc = Rpc.make(WS_METHODS.jiraStatus, {
+  payload: JiraStatusInput,
+  success: JiraConnection,
+  error: JiraRpcError,
+});
+
+const WsJiraConfigureRpc = Rpc.make(WS_METHODS.jiraConfigure, {
+  payload: JiraConfigureInput,
+  success: JiraConnection,
+  error: JiraRpcError,
+});
+
+const WsJiraSearchRpc = Rpc.make(WS_METHODS.jiraSearch, {
+  payload: JiraSearchInput,
+  success: JiraSearchResult,
+  error: JiraRpcError,
+});
+
+const WsJiraGetIssueRpc = Rpc.make(WS_METHODS.jiraGetIssue, {
+  payload: JiraIssueRefInput,
+  success: JiraIssueDetail,
+  error: JiraRpcError,
+});
+
+const WsJiraUpdateIssueRpc = Rpc.make(WS_METHODS.jiraUpdateIssue, {
+  payload: JiraUpdateIssueInput,
+  success: JiraIssueDetail,
+  error: JiraRpcError,
+});
+
+const WsJiraAddCommentRpc = Rpc.make(WS_METHODS.jiraAddComment, {
+  payload: JiraAddCommentInput,
+  success: JiraComment,
+  error: JiraRpcError,
+});
+
+const WsJiraTransitionRpc = Rpc.make(WS_METHODS.jiraTransition, {
+  payload: JiraTransitionInput,
+  success: JiraIssueDetail,
+  error: JiraRpcError,
+});
+
 const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
   payload: LaunchEditorInput,
   error: Schema.Union([ExternalLauncherError, EnvironmentAuthorizationError]),
@@ -1681,6 +1761,15 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitHubActionsDispatchRpc,
   WsGitHubActionsCancelRpc,
   WsGitHubActionsRerunRpc,
+  WsFoldersAttachJiraIssueRpc,
+  WsFoldersDetachJiraIssueRpc,
+  WsJiraStatusRpc,
+  WsJiraConfigureRpc,
+  WsJiraSearchRpc,
+  WsJiraGetIssueRpc,
+  WsJiraUpdateIssueRpc,
+  WsJiraAddCommentRpc,
+  WsJiraTransitionRpc,
   WsSkillsListRpc,
   WsSkillsGetRpc,
   WsSkillsSaveRpc,

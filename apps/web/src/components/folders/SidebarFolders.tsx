@@ -15,6 +15,7 @@ import {
   GitBranchIcon,
   LayersIcon,
   PlusIcon,
+  TicketIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { memo, useCallback, useMemo } from "react";
@@ -23,6 +24,7 @@ import { useStartFolderSession, useStartFolderThread } from "../../hooks/useStar
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
+import { useServerConfigs } from "../../state/entities";
 import { folderEnvironment, useEnvironmentFolders } from "../../state/folders";
 import { useEnvironmentQuery } from "../../state/query";
 import { vcsEnvironment } from "../../state/vcs";
@@ -34,6 +36,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { useRetainedValue, useSidebarRowSubscriptionLease } from "../Sidebar.logic";
 import { prStatusIndicator } from "../ThreadStatusIndicators";
+import { openJiraTicketsDialog } from "../jira/JiraTicketsDialog";
 import { openAddRepositoryDialog, openCreateFolderDialog } from "./CreateFolderDialog";
 
 const ISSUE_STATUSES = ["in-progress", "in-review", "done"] as const;
@@ -242,6 +245,9 @@ function FolderGroup(props: {
   });
   const deleteFolder = useAtomCommand(folderEnvironment.delete, { reportFailure: false });
   const startFolderSession = useStartFolderSession();
+  const jiraAvailable =
+    useServerConfigs().get(environmentId)?.environment.capabilities.jira === true;
+  const jiraCount = folder.jiraIssues?.length ?? 0;
   const issue = folder.issue;
   const openIssue = () => {
     if (!issue) return;
@@ -357,6 +363,11 @@ function FolderGroup(props: {
                 <MenuItem onClick={() => void startFolderSession(environmentId, folder)}>
                   New folder session
                 </MenuItem>
+                {jiraAvailable ? (
+                  <MenuItem onClick={() => openJiraTicketsDialog(environmentId, folder)}>
+                    Jira tickets…
+                  </MenuItem>
+                ) : null}
                 <MenuItem onClick={() => openAddRepositoryDialog(environmentId, folder)}>
                   Add repository…
                 </MenuItem>
@@ -395,6 +406,24 @@ function FolderGroup(props: {
               }
             />
           )}
+          {jiraAvailable && jiraCount > 0 ? (
+            <li className="flex h-7 items-center rounded-lg pr-1 hover:bg-sidebar-row-hover">
+              <button
+                type="button"
+                onClick={() => openJiraTicketsDialog(environmentId, folder)}
+                className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-1.5 text-left text-sidebar-foreground text-sm"
+              >
+                <TicketIcon
+                  aria-hidden
+                  className="size-3.5 shrink-0 text-sidebar-muted-foreground"
+                />
+                <span className="truncate">Jira tickets</span>
+                <span className="ml-auto shrink-0 text-sidebar-muted-foreground/60 text-xs tabular-nums">
+                  {jiraCount}
+                </span>
+              </button>
+            </li>
+          ) : null}
           {folder.members.map((member) => (
             <FolderMemberRow
               key={member.projectId}

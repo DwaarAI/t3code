@@ -33,6 +33,7 @@ export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./folder.ts";
 export * from "./githubActions.ts";
+export * from "./jira.ts";
 export * from "./skills.ts";
 export * from "./filesystem.ts";
 export * from "./agentSessions.ts";

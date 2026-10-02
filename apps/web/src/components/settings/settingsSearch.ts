@@ -707,6 +707,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     environmentOnly: true,
   },
   {
+    id: "jira-connection",
+    title: "Jira connection",
+    to: "/settings/source-control",
+    searchTerms: ["jira atlassian tickets issues api token folders"],
+    environmentOnly: true,
+  },
+  {
     id: "github-issue-folder-label",
     title: "GitHub issue label",
     to: "/settings/source-control",
