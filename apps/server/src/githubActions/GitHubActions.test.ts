@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import * as ServerConfig from "../config.ts";
@@ -42,6 +44,8 @@ const RUN_ROW = {
   updatedAt: "2026-09-30T10:01:00Z",
 };
 
+const encodeRuns = Schema.encodeSync(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
+
 /** Real git underneath; `gh` is recorded and answers run lists with one run. */
 const withActions = <A, E>(
   body: (input: {
@@ -50,7 +54,7 @@ const withActions = <A, E>(
   }) => Effect.Effect<
     A,
     E,
-    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
   >,
 ) => {
   const calls: GhCall[] = [];
@@ -58,6 +62,7 @@ const withActions = <A, E>(
     const actions = yield* GitHubActions.GitHubActions;
     return yield* body({ actions, calls });
   }).pipe(
+    Effect.scoped,
     Effect.provide(
       GitHubActions.layer.pipe(
         Layer.provide(GitVcsDriver.layer),
@@ -67,9 +72,7 @@ const withActions = <A, E>(
               Effect.sync(() => {
                 calls.push({ args: input.args, stdin: input.stdin });
                 const stdout =
-                  input.args[0] === "run" && input.args[1] === "list"
-                    ? JSON.stringify([RUN_ROW])
-                    : "";
+                  input.args[0] === "run" && input.args[1] === "list" ? encodeRuns([RUN_ROW]) : "";
                 return { stdout, stderr: "", code: 0 } as never;
               }),
           }),
@@ -128,7 +131,7 @@ describe("GitHubActions", () => {
           expect.arrayContaining(["--repo", "acme/app", "--branch", "feat/checkout"]),
         );
       }),
-    ).pipe(Effect.scoped),
+    ),
   );
 
   it.effect("dispatches on the remote branch with inputs on stdin", () =>
@@ -166,7 +169,7 @@ describe("GitHubActions", () => {
         expect(notManual.reason).toBe("invalid_input");
         expect(calls).toHaveLength(1);
       }),
-    ).pipe(Effect.scoped),
+    ),
   );
 
   it.effect("refuses to dispatch a branch that is not pushed", () =>
@@ -184,7 +187,7 @@ describe("GitHubActions", () => {
         expect(error.reason).toBe("not_pushed");
         expect(calls.some((call) => call.args[0] === "workflow")).toBe(false);
       }),
-    ).pipe(Effect.scoped),
+    ),
   );
 
   it.effect("reports a non-GitHub remote without calling gh", () =>
@@ -199,6 +202,6 @@ describe("GitHubActions", () => {
         expect((yield* Effect.flip(actions.cancel(root, 901))).reason).toBe("not_github");
         expect(calls).toEqual([]);
       }),
-    ).pipe(Effect.scoped),
+    ),
   );
 });
