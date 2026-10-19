@@ -50,9 +50,11 @@ in a member worktree, or, for a folder session spanning every repository, in an 
 rooted at the folder directory (`rootProjectId`, created on first use). Thread commands, events,
 and older clients are unaffected, which is why folder sessions reach mobile unchanged. Clients read
 folders through the `folders.*` RPCs, gated by the `folders` capability, and refetch after
-mutations instead of subscribing. Provider adapters derive the folder from the session cwd
-([`resolveFolderSessionContext`](../../apps/server/src/folder/folderLayout.ts)) to add
-instructions and grant access; keep that pure so it stays cheap per session.
+mutations instead of subscribing. Provider adapters derive the folder from the session cwd to
+add instructions and grant access. Packaged adapters cannot import server code, so they read it
+through `ProviderHost.sessionContext`; both that and the in-server adapters use
+[`resolveProviderSessionContext`](../../apps/server/src/folder/folderLayout.ts). Keep it pure so it
+stays cheap per session.
 [FolderPlanSync](../../apps/server/src/folder/FolderPlanSync.ts) mirrors proposed plans into
 `.context/` from the event stream, so plans stay in orchestration and the files are a copy.
 [FolderIssueSync](../../apps/server/src/folder/FolderIssueSync.ts) polls GitHub with the server's

@@ -75,7 +75,8 @@ Every folder has a `.context` directory next to its worktrees:
 Each repository worktree also links it as `.context`, so the notes are reachable from inside the
 repository. Git ignores the link through the repository's local exclude file, so it never shows up
 as a change. Agents in a folder are told where `.context` is and are asked to read it before
-starting and keep `plan.md` and `todos.md` current. Nothing in `.context` is committed to your
+starting and keep `plan.md` and `todos.md` current. Pi sessions do not get these folder
+instructions yet. Nothing in `.context` is committed to your
 repositories. To attach a file from it, type `@` in the composer and search for its name.
 
 ## Hand off to a new thread
