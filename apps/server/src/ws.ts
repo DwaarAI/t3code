@@ -101,6 +101,9 @@ import {
   type PullRequestRef,
   WS_METHODS,
   WsRpcGroup,
+  CoreWsRpcGroup,
+  DwaarWsRpcGroup,
+  RpcScopeAuthorization,
 } from "@t3tools/contracts";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import {
@@ -206,6 +209,7 @@ import * as GitWorkflowService from "./git/GitWorkflowService.ts";
 import { refreshPushedPullRequests } from "./git/refreshPushedPullRequests.ts";
 import { linkCreatedPullRequest } from "./git/linkCreatedPullRequest.ts";
 import * as ReviewService from "./review/ReviewService.ts";
+import { providerSessionRefOf } from "./provider/providerSessionRef.ts";
 import * as FolderService from "./folder/FolderService.ts";
 import * as GitHubActions from "./githubActions/GitHubActions.ts";
 import * as JiraService from "./jira/JiraService.ts";
@@ -550,6 +554,12 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
 // Middleware added later wraps middleware added earlier, so instrumentation wraps authorization.
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
+// Handlers are built per group: one object for every RPC exceeds TypeScript's
+// instantiation limit.
+const CoreServerWsRpcGroup =
+  CoreWsRpcGroup.middleware(RpcScopeAuthorization).middleware(RpcInstrumentation);
+const DwaarServerWsRpcGroup =
+  DwaarWsRpcGroup.middleware(RpcScopeAuthorization).middleware(RpcInstrumentation);
 // Replaying each intervening event costs a shell refetch; past this gap a
 // single O(active-threads) snapshot is cheaper and bounded.
 const SHELL_RESUME_MAX_GAP = 1_000;
@@ -1164,6 +1174,102 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
+/** The DwaarAI fork's RPCs: folders, GitHub Actions, Jira, skills and provider session refs. */
+const layerDwaarWsRpc = DwaarServerWsRpcGroup.toLayer(
+  Effect.gen(function* () {
+    const threadManagement = yield* ThreadManagementService.ThreadManagementService;
+    const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
+    const folderService = yield* FolderService.FolderService;
+    const githubActions = yield* GitHubActions.GitHubActions;
+    const jira = yield* JiraService.JiraService;
+    const skillService = yield* SkillService.SkillService;
+    // Claude and Codex list skills when probed; re-probe after a skill
+    // changes so `$` pickers catch up without holding the RPC open.
+    const afterSkillChange = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(
+        Effect.tap(() =>
+          providerRegistry
+            .refresh()
+            .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid),
+        ),
+      );
+    return DwaarServerWsRpcGroup.of({
+      [WS_METHODS.providerGetSessionRef]: (input) =>
+        threadManagement.getThreadRecords(input.threadId, ["providerThreads"]).pipe(
+          Effect.map(providerSessionRefOf),
+          Effect.mapError(
+            (cause) =>
+              new ProviderSessionRefError({
+                detail: "Could not read the provider session for this thread.",
+                cause,
+              }),
+          ),
+        ),
+      [WS_METHODS.skillsList]: () => skillService.list(),
+      [WS_METHODS.skillsGet]: (input) => skillService.get(input),
+      [WS_METHODS.skillsSave]: (input) =>
+        afterSkillChange(skillService.save(input)).pipe(Effect.map((skill) => ({ skill }))),
+      [WS_METHODS.skillsDelete]: (input) => afterSkillChange(skillService.delete(input)),
+      [WS_METHODS.skillsSetEnabled]: (input) =>
+        afterSkillChange(skillService.setEnabled(input)).pipe(Effect.map((skill) => ({ skill }))),
+      [WS_METHODS.foldersList]: () => folderService.list(),
+      [WS_METHODS.foldersCreate]: (input) =>
+        folderService.create(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersAddMember]: (input) =>
+        folderService.addMember(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersArchiveMember]: (input) =>
+        folderService.archiveMember(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersRestoreMember]: (input) =>
+        folderService.restoreMember(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersArchive]: (input) =>
+        folderService.archive(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersRestore]: (input) =>
+        folderService.restore(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersOpenRoot]: (input) =>
+        folderService.openRoot(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersCopyEnvFiles]: (input) =>
+        folderService.copyEnvFiles(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersDelete]: (input) => folderService.delete(input),
+      [WS_METHODS.foldersSetIssueStatus]: (input) =>
+        folderService.setIssueStatus(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.foldersWriteHandoff]: (input) => folderService.writeHandoff(input),
+      [WS_METHODS.githubActionsList]: (input) => githubActions.list(input.cwd),
+      [WS_METHODS.githubActionsDispatch]: (input) => githubActions.dispatch(input),
+      [WS_METHODS.githubActionsCancel]: (input) => githubActions.cancel(input.cwd, input.runId),
+      [WS_METHODS.githubActionsRerun]: (input) =>
+        githubActions.rerun(input.cwd, input.runId, input.failedOnly),
+      [WS_METHODS.foldersAttachJiraIssue]: (input) =>
+        // Only tickets the server's Jira login can read are attached.
+        jira.summaries([input.key]).pipe(
+          Effect.mapError(
+            (cause) => new FolderError({ reason: "invalid_input", detail: cause.message, cause }),
+          ),
+          Effect.flatMap((found) =>
+            found.length === 0
+              ? Effect.fail(
+                  new FolderError({
+                    reason: "not_found",
+                    detail: `Jira ticket ${input.key} was not found.`,
+                  }),
+                )
+              : folderService.attachJiraIssue(input),
+          ),
+          Effect.map((folder) => ({ folder })),
+        ),
+      [WS_METHODS.foldersDetachJiraIssue]: (input) =>
+        folderService.detachJiraIssue(input).pipe(Effect.map((folder) => ({ folder }))),
+      [WS_METHODS.jiraStatus]: () => jira.status(),
+      [WS_METHODS.jiraConfigure]: (input) => jira.configure(input),
+      [WS_METHODS.jiraSearch]: (input) =>
+        jira.search(input.query).pipe(Effect.map((issues) => ({ issues }))),
+      [WS_METHODS.jiraGetIssue]: (input) => jira.getIssue(input.key),
+      [WS_METHODS.jiraUpdateIssue]: (input) => jira.updateIssue(input),
+      [WS_METHODS.jiraAddComment]: (input) => jira.addComment(input.key, input.body),
+      [WS_METHODS.jiraTransition]: (input) => jira.transition(input.key, input.transitionId),
+    });
+  }),
+);
+
 const layerWsRpc = (
   currentSession: EnvironmentAuth.AuthenticatedSession,
   clientOrigin: OrchestrationClientOrigin,
@@ -1171,7 +1277,7 @@ const layerWsRpc = (
   previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
   serverBrowser: ServerBrowser.ServerBrowser["Service"],
 ) =>
-  ServerWsRpcGroup.toLayer(
+  CoreServerWsRpcGroup.toLayer(
     Effect.gen(function* () {
       const currentSessionId = currentSession.sessionId;
       const sql = yield* SqlClient.SqlClient;
@@ -1251,20 +1357,6 @@ const layerWsRpc = (
       const previewManager = yield* PreviewManager.PreviewManager;
       const portDiscovery = yield* PortScanner.PortDiscovery;
       const providerRegistry = yield* ProviderRegistry.ProviderRegistry;
-      const folderService = yield* FolderService.FolderService;
-      const githubActions = yield* GitHubActions.GitHubActions;
-      const jira = yield* JiraService.JiraService;
-      const skillService = yield* SkillService.SkillService;
-      // Claude and Codex list skills when probed; re-probe after a skill
-      // changes so `$` pickers catch up without holding the RPC open.
-      const afterSkillChange = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-        effect.pipe(
-          Effect.tap(() =>
-            providerRegistry
-              .refresh()
-              .pipe(Effect.ignoreCause({ log: true }), Effect.forkDetach, Effect.asVoid),
-          ),
-        );
       const modelManifest = yield* ModelManifest.ModelManifest;
       const providerLatestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
       const providerInstances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
@@ -1808,7 +1900,7 @@ const layerWsRpc = (
         return result;
       });
 
-      const handlers = ServerWsRpcGroup.of({
+      const handlers = CoreServerWsRpcGroup.of({
         [ORCHESTRATION_V2_WS_METHODS.dispatchCommand]: (command) =>
           Effect.annotateCurrentSpan({
             "orchestration_v2.command_id": command.commandId,
@@ -2592,87 +2684,6 @@ const layerWsRpc = (
             Effect.tap(() => repositoryIdentityResolver.resolve(input.cwd, { refresh: true })),
             Effect.tap(() => refreshGitStatus(input.cwd)),
           ),
-        [WS_METHODS.providerGetSessionRef]: (input) =>
-          threadManagement.getThreadRecords(input.threadId, ["providerThreads"]).pipe(
-            Effect.map((projection) => {
-              const providerThread =
-                projection.providerThreads.find(
-                  (candidate) => candidate.id === projection.thread.activeProviderThreadId,
-                ) ?? projection.providerThreads.at(-1);
-              return {
-                provider: providerThread?.driver ?? null,
-                sessionId: providerThread?.nativeThreadRef?.nativeId ?? null,
-              };
-            }),
-            Effect.mapError(
-              (cause) =>
-                new ProviderSessionRefError({
-                  detail: "Could not read the provider session for this thread.",
-                  cause,
-                }),
-            ),
-          ),
-        [WS_METHODS.skillsList]: () => skillService.list(),
-        [WS_METHODS.skillsGet]: (input) => skillService.get(input),
-        [WS_METHODS.skillsSave]: (input) =>
-          afterSkillChange(skillService.save(input)).pipe(Effect.map((skill) => ({ skill }))),
-        [WS_METHODS.skillsDelete]: (input) => afterSkillChange(skillService.delete(input)),
-        [WS_METHODS.skillsSetEnabled]: (input) =>
-          afterSkillChange(skillService.setEnabled(input)).pipe(Effect.map((skill) => ({ skill }))),
-        [WS_METHODS.foldersList]: () => folderService.list(),
-        [WS_METHODS.foldersCreate]: (input) =>
-          folderService.create(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersAddMember]: (input) =>
-          folderService.addMember(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersArchiveMember]: (input) =>
-          folderService.archiveMember(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersRestoreMember]: (input) =>
-          folderService.restoreMember(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersArchive]: (input) =>
-          folderService.archive(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersRestore]: (input) =>
-          folderService.restore(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersOpenRoot]: (input) =>
-          folderService.openRoot(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersCopyEnvFiles]: (input) =>
-          folderService.copyEnvFiles(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersDelete]: (input) => folderService.delete(input),
-        [WS_METHODS.foldersSetIssueStatus]: (input) =>
-          folderService.setIssueStatus(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.foldersWriteHandoff]: (input) => folderService.writeHandoff(input),
-        [WS_METHODS.githubActionsList]: (input) => githubActions.list(input.cwd),
-        [WS_METHODS.githubActionsDispatch]: (input) => githubActions.dispatch(input),
-        [WS_METHODS.githubActionsCancel]: (input) => githubActions.cancel(input.cwd, input.runId),
-        [WS_METHODS.githubActionsRerun]: (input) =>
-          githubActions.rerun(input.cwd, input.runId, input.failedOnly),
-        [WS_METHODS.foldersAttachJiraIssue]: (input) =>
-          // Only tickets the server's Jira login can read are attached.
-          jira.summaries([input.key]).pipe(
-            Effect.mapError(
-              (cause) => new FolderError({ reason: "invalid_input", detail: cause.message, cause }),
-            ),
-            Effect.flatMap((found) =>
-              found.length === 0
-                ? Effect.fail(
-                    new FolderError({
-                      reason: "not_found",
-                      detail: `Jira ticket ${input.key} was not found.`,
-                    }),
-                  )
-                : folderService.attachJiraIssue(input),
-            ),
-            Effect.map((folder) => ({ folder })),
-          ),
-        [WS_METHODS.foldersDetachJiraIssue]: (input) =>
-          folderService.detachJiraIssue(input).pipe(Effect.map((folder) => ({ folder }))),
-        [WS_METHODS.jiraStatus]: () => jira.status(),
-        [WS_METHODS.jiraConfigure]: (input) => jira.configure(input),
-        [WS_METHODS.jiraSearch]: (input) =>
-          jira.search(input.query).pipe(Effect.map((issues) => ({ issues }))),
-        [WS_METHODS.jiraGetIssue]: (input) => jira.getIssue(input.key),
-        [WS_METHODS.jiraUpdateIssue]: (input) => jira.updateIssue(input),
-        [WS_METHODS.jiraAddComment]: (input) => jira.addComment(input.key, input.body),
-        [WS_METHODS.jiraTransition]: (input) => jira.transition(input.key, input.transitionId),
         [WS_METHODS.projectsSearchEntries]: (input) =>
           workspaceEntries.search(input).pipe(
             Effect.mapError(
@@ -3264,6 +3275,7 @@ export const layer = Layer.unwrap(
               previewAutomationBroker,
               serverBrowser,
             ).pipe(
+              Layer.merge(layerDwaarWsRpc),
               Layer.provideMerge(RpcSerialization.layerJson),
               // Request fibers run in the handlers' context, so this reporter sees
               // their defects, not the rest of the server's.

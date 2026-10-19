@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
-import * as GitHubCli from "../sourceControl/GitHubCli.ts";
+import * as GhCli from "../githubActions/GhCli.ts";
 import { type IssueKey, STATUS_LABEL_COLORS, STATUS_LABELS } from "./githubIssues.ts";
 
 export interface FetchedIssue {
@@ -107,15 +107,14 @@ function issueQuery(withParent: boolean): string {
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
-  const gh = yield* GitHubCli.GitHubCli;
+  const gh = yield* GhCli.GhCli;
   const serverConfig = yield* ServerConfig.ServerConfig;
   // `gh` addresses repositories with --repo, so any directory works as cwd.
   const cwd = serverConfig.baseDir;
   const labelledRepositories = new Set<string>();
 
   const run = (detail: string, args: ReadonlyArray<string>, stdin?: string) =>
-    gh.execute({ cwd, args, ...(stdin === undefined ? {} : { stdin }) }).pipe(
-      Effect.map((output) => output.stdout),
+    gh.run({ cwd, args, ...(stdin === undefined ? {} : { stdin }) }).pipe(
       Effect.mapError(
         (cause) =>
           new FolderError({

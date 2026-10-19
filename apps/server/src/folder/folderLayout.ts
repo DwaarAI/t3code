@@ -3,7 +3,12 @@
  * `.context/` contains, what agents are told about it, and how a handoff note
  * is rendered from a thread. FolderService does the IO.
  */
-import type { FolderMember, OrchestrationThread } from "@t3tools/contracts";
+import type {
+  FolderMember,
+  OrchestrationV2AppThread,
+  OrchestrationV2ConversationMessage,
+  OrchestrationV2PlanArtifact,
+} from "@t3tools/contracts";
 import type * as Path from "effect/Path";
 
 export const FOLDER_MANIFEST_FILE = "folder.json";
@@ -181,7 +186,9 @@ interface Exchange {
 }
 
 /** Pair each user message with the last agent reply before the next user message. */
-function collectExchanges(messages: OrchestrationThread["messages"]): Exchange[] {
+type HandoffMessage = Pick<OrchestrationV2ConversationMessage, "role" | "text" | "streaming">;
+
+function collectExchanges(messages: ReadonlyArray<HandoffMessage>): Exchange[] {
   const exchanges: Array<{ user: string; agent: string | null }> = [];
   for (const message of messages) {
     if (message.streaming || message.text.trim().length === 0) continue;
@@ -202,15 +209,18 @@ function renderExchange(exchange: Exchange, index: number): string {
 
 export function buildHandoffMarkdown(input: {
   readonly thread: Pick<
-    OrchestrationThread,
-    "id" | "title" | "messages" | "proposedPlans" | "modelSelection" | "branch" | "worktreePath"
+    OrchestrationV2AppThread,
+    "id" | "title" | "modelSelection" | "branch" | "worktreePath"
   >;
+  readonly messages: ReadonlyArray<HandoffMessage>;
+  /** In the order they were proposed. */
+  readonly plans: ReadonlyArray<OrchestrationV2PlanArtifact>;
   readonly folderName: string;
   readonly member: FolderMember | null;
   readonly writtenAt: string;
 }): string {
   const { thread, member } = input;
-  const exchanges = collectExchanges(thread.messages);
+  const exchanges = collectExchanges(input.messages);
   const rendered = exchanges.map(renderExchange);
   // Keep the first request, which usually states the goal, and as many of the
   // latest exchanges as fit.
@@ -223,9 +233,9 @@ export function buildHandoffMarkdown(input: {
     rendered.splice(1, 0, `_${omitted} earlier exchange${omitted === 1 ? "" : "s"} omitted._`);
   }
 
-  const latestPlan = [...thread.proposedPlans].sort((a, b) =>
-    a.updatedAt.localeCompare(b.updatedAt),
-  )[thread.proposedPlans.length - 1];
+  const latestPlan = input.plans.findLast(
+    (plan) => plan.kind === "proposed_plan" && plan.status !== "superseded",
+  );
   const base = member?.baseBranch;
   const inspect = base
     ? `Inspect the work so far with \`git log ${base}..HEAD\` and \`git diff ${base}...HEAD\`.`
@@ -248,7 +258,9 @@ export function buildHandoffMarkdown(input: {
     "",
     `Read this note, then plan.md and todos.md in the same .context directory. ${inspect} The digest below records what was asked and what the previous agent reported; verify claims against the code before relying on them.`,
     "",
-    ...(latestPlan ? ["## Latest plan", "", latestPlan.planMarkdown.trim(), ""] : []),
+    ...(latestPlan?.kind === "proposed_plan"
+      ? ["## Latest plan", "", latestPlan.markdown.trim(), ""]
+      : []),
     "## Conversation digest",
     "",
     rendered.length > 0 ? rendered.join("\n\n") : "_The thread has no messages yet._",

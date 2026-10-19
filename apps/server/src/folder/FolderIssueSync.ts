@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as FolderGitHub from "./FolderGitHub.ts";
 import * as FolderService from "./FolderService.ts";
@@ -33,7 +33,7 @@ export const makeSyncOnce = Effect.gen(function* () {
   const settings = yield* ServerSettings.ServerSettingsService;
   const folders = yield* FolderService.FolderService;
   const github = yield* FolderGitHub.FolderGitHub;
-  const snapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+  const projects = yield* ProjectService.ProjectService;
   // Issues still carrying the trigger label that must not be retried every
   // pass: authors who may not push, and failures whose label swap also failed.
   // A server restart retries them. Failed issues normally lose the trigger
@@ -130,10 +130,10 @@ export const makeSyncOnce = Effect.gen(function* () {
     const current = yield* settings.getSettings;
     if (!current.githubIssueFolders) return;
     const label = current.githubIssueFolderLabel;
-    const snapshot = yield* snapshotQuery.getShellSnapshot();
+    const shells = yield* projects.listShells();
     const projectsByRepository = new Map<string, OrchestrationProjectShell>();
     const repositoryByProject = new Map<string, string>();
-    for (const project of snapshot.projects) {
+    for (const project of shells) {
       const repository = githubRepository(project);
       if (repository === null) continue;
       projectsByRepository.set(repository.toLowerCase(), project);

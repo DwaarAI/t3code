@@ -18,7 +18,7 @@ import * as Path from "effect/Path";
 
 import { BUILTIN_SKILL_FILES, type BuiltinSkillFile } from "./builtinSkills.gen.ts";
 
-export const BUILTIN_SKILLS_PLUGIN_NAME = "t3";
+const BUILTIN_SKILLS_PLUGIN_NAME = "t3";
 
 /** Marks a directory under `skills/` as server-owned, so it is replaced on every start. */
 export const BUILTIN_SKILL_MARKER = ".t3-builtin";

@@ -63,7 +63,7 @@ const textEncoder = new TextEncoder();
  * The error for the first file a save must not write, if any. Paths are
  * relative POSIX paths that stay inside the skill folder.
  */
-export function validateSkillFiles(files: ReadonlyArray<SkillFile>): string | null {
+function validateSkillFiles(files: ReadonlyArray<SkillFile>): string | null {
   const entry = files.find((file) => file.path === SKILL_ENTRY_FILE);
   if (entry === undefined) {
     return `A skill needs a ${SKILL_ENTRY_FILE} at its top level.`;
@@ -239,9 +239,9 @@ export const make = Effect.gen(function* () {
           input.name,
         );
 
-        const stagingId = yield* crypto.randomUUIDv4.pipe(
-          Effect.mapError(ioFailed("Could not generate a staging id.")),
-        );
+        const stagingId = yield* crypto
+          .randomUUIDv4()
+          .pipe(Effect.mapError(ioFailed("Could not generate a staging id.")));
         const staged = path.join(stagingDir, `${input.name}-${stagingId}`);
         yield* Effect.gen(function* () {
           for (const file of input.files) {

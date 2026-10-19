@@ -28,6 +28,8 @@ import * as ManagedProjectFolders from "../../../project/ManagedProjectFolders.t
 import * as ThreadLaunchService from "../../../orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadSearch from "../../../orchestration-v2/ThreadSearch.ts";
 import * as PreviewManager from "../../../preview/Manager.ts";
+import * as FolderService from "../../../folder/FolderService.ts";
+import * as JiraService from "../../../jira/JiraService.ts";
 import * as SourceControlRepositoryService from "../../../sourceControl/SourceControlRepositoryService.ts";
 import * as GitVcsDriver from "../../../vcs/GitVcsDriver.ts";
 import * as McpHttpServer from "../../McpHttpServer.ts";
@@ -57,6 +59,8 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(SourceControlRepositoryService.SourceControlRepositoryService)({}),
   Layer.mock(ThreadLaunchService.ThreadLaunchService)({}),
   Layer.mock(ThreadSearch.ThreadSearch)({}),
+  Layer.mock(FolderService.FolderService)({}),
+  Layer.mock(JiraService.JiraService)({}),
 );
 
 const ToolsListPayload = Schema.fromJsonString(

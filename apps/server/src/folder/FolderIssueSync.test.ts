@@ -4,13 +4,12 @@ import {
   type Folder,
   type FolderCreateInput,
   type OrchestrationProjectShell,
-  type OrchestrationShellSnapshot,
   ProjectId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as FolderGitHub from "./FolderGitHub.ts";
 import * as FolderIssueSync from "./FolderIssueSync.ts";
@@ -64,12 +63,9 @@ const runSync = (world: World, passes = 1) =>
             githubIssueFolders: world.enabled,
           })),
         }),
-        Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
-          getShellSnapshot: () =>
-            Effect.succeed({
-              projects: [project("p-api", "acme", "api"), project("p-web", "acme", "web")],
-              threads: [],
-            } as unknown as OrchestrationShellSnapshot),
+        Layer.mock(ProjectService.ProjectService)({
+          listShells: () =>
+            Effect.succeed([project("p-api", "acme", "api"), project("p-web", "acme", "web")]),
         }),
         Layer.mock(FolderService.FolderService)({
           list: () =>
