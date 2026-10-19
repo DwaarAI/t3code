@@ -108,6 +108,8 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "copy-path",
     "copy-branch",
     "copy-thread-id",
+    "copy-session-id",
+    "copy-resume-command",
   ].includes(action);
 }
 

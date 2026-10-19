@@ -344,6 +344,13 @@ export default function DiffPanel({
   const selectedGitSource = branchDiffPreview.data?.sources.find(
     (source) => source.kind === (selectedGitScope === "unstaged" ? "working-tree" : "branch-range"),
   );
+  // Both sources arrive together, so the header can always say how much is
+  // committed and how much is not, whichever one is on screen.
+  const gitSourceFileCount = (kind: "working-tree" | "branch-range") =>
+    branchDiffPreview.data?.sources.find((candidate) => candidate.kind === kind)?.files?.length ??
+    null;
+  const uncommittedFileCount = gitSourceFileCount("working-tree");
+  const branchFileCount = gitSourceFileCount("branch-range");
   const refreshPreviewQuery = branchDiffPreview.refresh;
   const refreshDiffFromUserAction = refreshPreviewQuery;
 
@@ -704,6 +711,25 @@ export default function DiffPanel({
             </DropdownMenuSub>
           </DropdownMenuContent>
         </DropdownMenu>
+        {selectedRunId === null && isGitRepo ? (
+          <ToggleGroup
+            aria-label="Branch and uncommitted changes"
+            value={[selectedGitScope]}
+            onValueChange={(next) => {
+              const scope = next[0];
+              if (scope === "branch" || scope === "unstaged") selectGitScope(scope);
+            }}
+          >
+            <Toggle value="branch">
+              Changes
+              <span className="tabular-nums opacity-70">{branchFileCount ?? "–"}</span>
+            </Toggle>
+            <Toggle value="unstaged">
+              Uncommitted
+              <span className="tabular-nums opacity-70">{uncommittedFileCount ?? "–"}</span>
+            </Toggle>
+          </ToggleGroup>
+        ) : null}
         {selectedRunId === null && selectedGitScope === "branch" && selectedGitSource?.baseRef && (
           <div
             className="flex min-w-0 max-w-full items-center gap-2 overflow-hidden text-xs text-muted-foreground"

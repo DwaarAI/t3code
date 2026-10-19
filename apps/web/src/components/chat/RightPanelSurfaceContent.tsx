@@ -22,6 +22,7 @@ import { PullRequestDetailPanel } from "../pullRequest/PullRequestDetailPanel";
 import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
+import { GitHubActionsPanel } from "../GitHubActionsPanel";
 
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
@@ -77,6 +78,8 @@ export function RightPanelSurfaceContent(props: {
   readonly terminal: RightPanelTerminalProps;
   readonly pullRequest: RightPanelPullRequestProps;
   readonly files: RightPanelFileProps;
+  /** The checkout whose branch the Actions surface lists, or null where it is unavailable. */
+  readonly githubActionsCwd: string | null;
 }) {
   const { surface, threadRef, visible } = props;
   if (surface === null) return null;
@@ -162,6 +165,10 @@ export function RightPanelSurfaceContent(props: {
     }
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
+    case "github-actions":
+      return props.githubActionsCwd ? (
+        <GitHubActionsPanel environmentId={props.environmentId} cwd={props.githubActionsCwd} />
+      ) : null;
     case "device":
       return (
         <Suspense fallback={null}>

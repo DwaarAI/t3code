@@ -42,7 +42,11 @@ import {
 } from "../logicalProject";
 import { buildPhysicalToLogicalProjectKeyMap } from "../sidebarProjectGrouping";
 import { threadRuntimeCanArchive } from "@t3tools/client-runtime/state/models";
+import { isFolderThread, useEnvironmentFolders } from "../state/folders";
 import { useCopyToClipboard } from "./useCopyToClipboard";
+import { useCopyProviderSession } from "./useCopyProviderSession";
+import { useFolderHandoff } from "./useFolderHandoff";
+import { useStartReview } from "./useStartReview";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { useThreadActions } from "./useThreadActions";
@@ -88,6 +92,10 @@ export function useThreadActionMenu(input: {
     reportFailure: false,
   });
   const handleNewThread = useNewThreadHandler();
+  const handOff = useFolderHandoff();
+  const copyProviderSession = useCopyProviderSession();
+  const startReview = useStartReview();
+  const environmentFolders = useEnvironmentFolders();
   const confirmThreadDelete = useClientSettings((s) => s.confirmThreadDelete);
   const confirmThreadArchive = useClientSettings((s) => s.confirmThreadArchive);
   const timestampFormat = useClientSettings((s) => s.timestampFormat);
@@ -131,6 +139,9 @@ export function useThreadActionMenu(input: {
       const items = buildThreadActionMenuItems({
         canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
         branch: thread.branch ?? null,
+        canHandoff: isFolderThread(environmentFolders, thread.environmentId, thread),
+        canReview: environmentFolders.some((entry) => entry.environmentId === thread.environmentId),
+        hasProviderSession: thread.activeProviderThreadId !== null,
         projectFilter: null,
         isPinned: thread.pinnedAt != null,
         isSettled: supports.settlement && thread.settledOverride === "settled",
@@ -192,6 +203,12 @@ export function useThreadActionMenu(input: {
           });
           return;
         }
+        case "handoff":
+          await handOff(thread);
+          return;
+        case "review":
+          await startReview(thread);
+          return;
         case "new-thread-on-branch": {
           const result = await settlePromise(() =>
             handleNewThread(scopeProjectRef(threadRef.environmentId, thread.projectId), {
@@ -265,6 +282,15 @@ export function useThreadActionMenu(input: {
           return;
         case "copy-thread-id":
           copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+          return;
+        case "copy-session-id":
+        case "copy-resume-command":
+          await copyProviderSession({
+            environmentId: threadRef.environmentId,
+            threadId: thread.id,
+            cwd: thread.worktreePath ?? projectCwd,
+            what: action === "copy-session-id" ? "session-id" : "resume-command",
+          });
           return;
         case "archive": {
           if (confirmThreadArchive) {

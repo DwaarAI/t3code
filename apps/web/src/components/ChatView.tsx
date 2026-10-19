@@ -394,6 +394,8 @@ import {
   waitForThreadShell,
 } from "../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
+import { readNeedsFolderWorktreeSetup } from "../state/folders";
+import { FolderThreadTabs } from "./folders/FolderThreadTabs";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { isTimelineScrollTarget } from "./chat/timelineScrollTarget";
@@ -3657,6 +3659,15 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "pull-requests");
   };
   const addPullRequestsSurfaceStable = useStableCallback(addPullRequestsSurface);
+  const githubActionsCwd =
+    serverConfig?.environment.capabilities.githubActions === true && isGitRepo
+      ? gitStatusCwd
+      : null;
+  const addGitHubActionsSurface = () => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().open(activeThreadRef, "github-actions");
+  };
+  const addGitHubActionsSurfaceStable = useStableCallback(addGitHubActionsSurface);
   const { state: deviceState, loaded: deviceStateLoaded } = useDeviceState(
     activeThreadRef?.environmentId ?? null,
   );
@@ -6913,9 +6924,14 @@ export default function ChatView(props: ChatViewProps) {
     let backgroundDraftOpened = false;
     let turnStartSucceeded = false;
     if (failure === null && turnAttachmentsResult._tag === "Success") {
+      const runFolderSetupScript =
+        isLocalDraftThread &&
+        !baseBranchForWorktree &&
+        readNeedsFolderWorktreeSetup(activeThread.environmentId, activeThread.worktreePath);
       const bootstrap =
         isLocalDraftThread || baseBranchForWorktree
           ? {
+              ...(runFolderSetupScript ? { runSetupScript: true } : {}),
               ...(isLocalDraftThread
                 ? {
                     createThread: {
@@ -7763,6 +7779,7 @@ export default function ChatView(props: ChatViewProps) {
         onOpenFile: openFileSurfaceStable,
         onPendingChange: handleFilePendingChangeStable,
       }}
+      githubActionsCwd={githubActionsCwd}
     />
   ) : null;
   const panelToggleControlProps = {
@@ -7890,6 +7907,13 @@ export default function ChatView(props: ChatViewProps) {
               : {})}
           />
         </header>
+        <FolderThreadTabs
+          environmentId={activeThread.environmentId}
+          projectId={activeThread.projectId}
+          threadId={activeThread.id}
+          worktreePath={activeThread.worktreePath}
+          isServerThread={isServerThread}
+        />
 
         <div className="relative flex min-h-0 min-w-0 flex-1">
           <ThreadFindCanvas
@@ -8552,6 +8576,8 @@ export default function ChatView(props: ChatViewProps) {
           onAddFiles={addFilesSurfaceStable}
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
+          onAddGitHubActions={addGitHubActionsSurfaceStable}
+          githubActionsAvailable={githubActionsCwd !== null}
           onAddDevice={addDeviceSurfaceStable}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
@@ -8607,6 +8633,8 @@ export default function ChatView(props: ChatViewProps) {
             onAddFiles={addFilesSurfaceStable}
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
+            onAddGitHubActions={addGitHubActionsSurfaceStable}
+            githubActionsAvailable={githubActionsCwd !== null}
             onAddDevice={addDeviceSurfaceStable}
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}

@@ -24,7 +24,7 @@ import {
   Play,
   RefreshCw,
 } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { useId, useState } from "react";
 
 import { cn } from "~/lib/utils";
 import { githubActionsEnvironment } from "~/state/githubActions";
@@ -69,7 +69,7 @@ function RunStateIcon({ state }: { state: WorkflowRunState }) {
 
 function SectionTitle({ children }: { children: string }) {
   return (
-    <div className="px-1.5 pt-1 text-[.65rem] font-medium uppercase tracking-wider text-muted-foreground">
+    <div className="px-1.5 pt-1 text-3xs font-medium uppercase tracking-wider text-muted-foreground">
       {children}
     </div>
   );
@@ -99,10 +99,7 @@ export function GitHubActionsPanel({
   const [dispatching, setDispatching] = useState<GitHubDispatchableWorkflow | null>(null);
   const [showAll, setShowAll] = useState(false);
   const data = query.data;
-  const runs = useMemo(() => {
-    if (!data) return [];
-    return showAll ? data.runs : latestRunPerWorkflow(data.runs);
-  }, [data, showAll]);
+  const runs = !data ? [] : showAll ? data.runs : latestRunPerWorkflow(data.runs);
 
   if (!data) {
     return query.error ? (

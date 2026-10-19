@@ -26,6 +26,7 @@ import { restrictToFirstScrollableAncestor, restrictToHorizontalAxis } from "@dn
 import { horizontalListSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  CirclePlay,
   Smartphone,
   ChevronDown,
   ChevronLeft,
@@ -137,6 +138,9 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
+  /** Absent where the panel has no workspace branch, which hides Actions. */
+  onAddGitHubActions?: (() => void) | undefined;
+  githubActionsAvailable?: boolean | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -171,6 +175,7 @@ const SURFACE_DISABLED_REASONS = {
   diff: "Diff is only available for server threads in Git repositories.",
   pullRequest: "This thread's branch has no pull request yet.",
   pullRequests: "No linked pull requests are available for this thread.",
+  githubActions: "GitHub Actions are only available for Git repositories on GitHub servers.",
   device: "Devices are only available from a thread.",
 } as const;
 
@@ -192,6 +197,7 @@ const SURFACE_UNAVAILABLE_HINTS = {
   diff: "Available for Git repositories.",
   pullRequest: "No pull request on this branch yet.",
   pullRequests: "No linked pull requests available.",
+  githubActions: "Available for Git repositories.",
   device: "Available from a thread.",
 } as const;
 
@@ -314,6 +320,9 @@ function RightPanelEmptyState(props: {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
+  /** Absent where the panel has no workspace branch, which hides Actions. */
+  onAddGitHubActions?: (() => void) | undefined;
+  githubActionsAvailable?: boolean | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -372,6 +381,14 @@ function RightPanelEmptyState(props: {
       available: props.pullRequestsAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
       onClick: props.onAddPullRequests,
+    },
+    {
+      label: "GitHub Actions",
+      icon: CirclePlay,
+      shortcut: "G",
+      available: props.githubActionsAvailable === true,
+      disabledReason: SURFACE_UNAVAILABLE_HINTS.githubActions,
+      onClick: props.onAddGitHubActions ?? (() => undefined),
     },
     {
       label: "Device",
@@ -564,6 +581,8 @@ function surfaceTitle(
       return `#${surface.number}`;
     case "pull-requests":
       return "Pull requests";
+    case "github-actions":
+      return "Actions";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
     case "preview": {
@@ -654,6 +673,8 @@ function SurfaceIcon({
       );
     case "pull-requests":
       return <PullRequestGlyph.link className="size-3 shrink-0" />;
+    case "github-actions":
+      return <CirclePlay className="size-3 shrink-0" />;
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -1074,6 +1095,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       onClick: props.onAddPullRequests,
     },
     {
+      label: "GitHub Actions",
+      icon: CirclePlay,
+      shortcut: "G",
+      available: props.githubActionsAvailable === true,
+      disabledReason: SURFACE_DISABLED_REASONS.githubActions,
+      onClick: props.onAddGitHubActions ?? (() => undefined),
+    },
+    {
       label: "Device",
       icon: Smartphone,
       shortcut: "M",
@@ -1453,6 +1482,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddFiles={props.onAddFiles}
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
+            onAddGitHubActions={props.onAddGitHubActions}
             onAddDevice={props.onAddDevice}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
@@ -1460,6 +1490,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             filesAvailable={props.filesAvailable}
             pullRequestAvailable={props.pullRequestAvailable}
             pullRequestsAvailable={props.pullRequestsAvailable}
+            githubActionsAvailable={props.githubActionsAvailable}
             deviceAvailable={props.deviceAvailable}
           />
         ) : (

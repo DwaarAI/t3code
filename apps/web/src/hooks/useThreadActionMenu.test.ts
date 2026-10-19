@@ -61,6 +61,7 @@ vi.mock("../state/entities", () => ({
     worktreePath: null,
     runtime: null,
     latestRun: null,
+    activeProviderThreadId: "provider-thread",
   }),
   useProjects: () => [{ id: "project", environmentId: "secondary" }],
 }));
@@ -106,6 +107,19 @@ vi.mock("../components/Sidebar.snooze", () => ({
     { id: "hour", label: "In 1 hour", whenLabel: "3 PM", snoozedUntil: "2099-01-01T00:00:00Z" },
   ],
   snoozeWakeDescription: () => "later",
+}));
+vi.mock("../state/folders", () => ({
+  useEnvironmentFolders: () => [{ environmentId: "secondary", folders: [] }],
+  isFolderThread: () => true,
+}));
+vi.mock("./useFolderHandoff", () => ({
+  useFolderHandoff: () => async () => recordEffect("handoff"),
+}));
+vi.mock("./useStartReview", () => ({
+  useStartReview: () => async () => recordEffect("review"),
+}));
+vi.mock("./useCopyProviderSession", () => ({
+  useCopyProviderSession: () => async (input: { what: string }) => recordEffect(input.what),
 }));
 vi.mock("./useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: () => recordEffect("copy") }),
@@ -210,6 +224,8 @@ describe("thread menu permissions", () => {
   it.each([
     ["new-thread-on-branch", "draft"],
     ["copy-thread-id", "copy"],
+    ["copy-session-id", "session-id"],
+    ["copy-resume-command", "resume-command"],
     ["mark-unread", "mark-unread"],
     ["project-settings", "project-settings"],
   ] as const)("keeps %s available without task permission", async (action, effect) => {
@@ -217,5 +233,15 @@ describe("thread menu permissions", () => {
     createMenu().openMenu(position);
     await state.completed.promise;
     expect(state.effects).toEqual([effect]);
+  });
+});
+
+describe("folder thread actions", () => {
+  it.each(["review", "handoff"] as const)("%s starts its new thread", async (action) => {
+    state.granted.add("secondary");
+    state.show.mockResolvedValue(action);
+    createMenu().openMenu(position);
+    await state.completed.promise;
+    expect(state.effects).toEqual([action]);
   });
 });

@@ -1,18 +1,11 @@
 import {
-  type ComposerPathSearchEntry,
+  type ComposerExtraSearchRoot,
   type ComposerPathSearchState,
   type ComposerPathSearchTarget,
+  extraRootPathEntries,
 } from "@t3tools/client-runtime/state/threads";
 
 import { useComposerPathSearch as useComposerPathSearchQuery } from "../state/queries";
-
-/** A directory outside the workspace whose files can be attached, such as shared guides. */
-export interface ComposerExtraSearchRoot {
-  readonly cwd: string;
-  readonly label: string;
-}
-
-const EXTRA_ROOT_RESULT_LIMIT = 5;
 
 function useExtraRootEntries(
   target: ComposerPathSearchTarget,
@@ -24,18 +17,7 @@ function useExtraRootEntries(
     query: target.query,
   });
   if (root === null) return { entries: [], isPending: false };
-  const separator = root.cwd.includes("\\") && !root.cwd.includes("/") ? "\\" : "/";
-  const entries: ComposerPathSearchEntry[] = state.entries
-    .filter((entry) => entry.kind === "file")
-    .slice(0, EXTRA_ROOT_RESULT_LIMIT)
-    .map((entry) => ({
-      path: `${root.cwd.replace(/[\\/]+$/, "")}${separator}${entry.path}`,
-      kind: entry.kind,
-      sourceLabel: [root.label, entry.path.split(/[\\/]/).slice(0, -1).join("/")]
-        .filter(Boolean)
-        .join("/"),
-    }));
-  return { entries, isPending: state.isPending };
+  return { entries: extraRootPathEntries(root, state.entries), isPending: state.isPending };
 }
 
 export function useComposerPathSearch(

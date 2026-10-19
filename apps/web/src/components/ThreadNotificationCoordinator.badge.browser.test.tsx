@@ -43,8 +43,17 @@ vi.mock(import("../state/environments"), async (original) => ({
 vi.mock(import("../hooks/useSettings"), async (original) => ({
   ...(await original()),
   useClientSettings: ((
-    select: (settings: { notificationMode: string; inAppNotificationsEnabled: boolean }) => unknown,
-  ) => select({ notificationMode: state.mode, inAppNotificationsEnabled: state.inApp })) as never,
+    select: (settings: {
+      notificationMode: string;
+      inAppNotificationsEnabled: boolean;
+      attentionReminderMinutes: number;
+    }) => unknown,
+  ) =>
+    select({
+      notificationMode: state.mode,
+      inAppNotificationsEnabled: state.inApp,
+      attentionReminderMinutes: 0,
+    })) as never,
   getClientSettings: (() => ({ notificationMode: state.mode })) as never,
 }));
 vi.mock(import("../threadNotifications"), async (original) => ({

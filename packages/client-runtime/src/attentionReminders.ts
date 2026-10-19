@@ -1,4 +1,8 @@
-import type { EnvironmentId, OrchestrationThreadShell, ThreadId } from "@t3tools/contracts";
+import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
+
+import type { PendingSubagentRequest } from "./state/models.ts";
+import { pendingSubagentRequestsByThread } from "./state/threadShell.ts";
 
 /**
  * Reminders for threads blocked on the user (a pending approval or question).
@@ -22,14 +26,14 @@ export interface AttentionReminder {
 }
 
 export type AttentionReminderThread = Pick<
-  OrchestrationThreadShell,
+  OrchestrationV2ThreadShell,
   | "id"
   | "title"
   | "archivedAt"
   | "snoozedUntil"
-  | "latestTurn"
-  | "hasPendingApprovals"
-  | "hasPendingUserInput"
+  | "lineage"
+  | "latestRunId"
+  | "pendingRuntimeRequest"
 >;
 
 export interface AttentionReminderEnvironment {
@@ -39,30 +43,67 @@ export interface AttentionReminderEnvironment {
    * shells keep their existing reminders instead of cancelling on stale data.
    */
   readonly live: boolean;
-  readonly threads: ReadonlyArray<AttentionReminderThread>;
+  /** Every thread of the environment, so subagent requests reach their parent. */
+  readonly threads: ReadonlyArray<OrchestrationV2ThreadShell>;
 }
 
+/**
+ * The reminder one thread needs right now. Subagents never remind themselves:
+ * their requests surface on the parent through `subagentRequest`.
+ */
 export function threadAttentionReminder(
   environmentId: EnvironmentId,
   thread: AttentionReminderThread,
   nowMs: number,
+  subagentRequest: PendingSubagentRequest | null = null,
 ): AttentionReminder | null {
   if (thread.archivedAt !== null) return null;
+  if (thread.lineage.relationshipToParent === "subagent") return null;
   // A snoozed thread was deliberately put away; it reminds again once the snooze ends.
-  if (thread.snoozedUntil && Date.parse(thread.snoozedUntil) > nowMs) return null;
-  const kind: AttentionReminderKind | null = thread.hasPendingApprovals
-    ? "approval"
-    : thread.hasPendingUserInput
-      ? "input"
-      : null;
+  if (thread.snoozedUntil && DateTime.toEpochMillis(thread.snoozedUntil) > nowMs) return null;
+  const request = thread.pendingRuntimeRequest;
+  const ownKind: AttentionReminderKind | null =
+    request === null || request.kind === "auth_refresh"
+      ? null
+      : request.kind === "user_input"
+        ? "input"
+        : "approval";
+  const kind: AttentionReminderKind | null =
+    ownKind ??
+    (subagentRequest === "approval"
+      ? "approval"
+      : subagentRequest === "user_input"
+        ? "input"
+        : null);
   if (!kind) return null;
+  // Keyed by the request itself, so a later request on the same thread reminds again.
+  const requestKey = ownKind && request ? request.id : `subagent:${thread.latestRunId ?? ""}`;
   return {
-    id: `${ATTENTION_REMINDER_ID_PREFIX}${environmentId}:${thread.id}:${thread.latestTurn?.turnId ?? ""}:${kind}`,
+    id: `${ATTENTION_REMINDER_ID_PREFIX}${environmentId}:${thread.id}:${requestKey}:${kind}`,
     environmentId,
     threadId: thread.id,
     threadTitle: thread.title,
     kind,
   };
+}
+
+export function environmentAttentionReminders(
+  environmentId: EnvironmentId,
+  threads: ReadonlyArray<OrchestrationV2ThreadShell>,
+  nowMs: number,
+): ReadonlyArray<AttentionReminder> {
+  const subagentRequests = pendingSubagentRequestsByThread(threads);
+  const reminders: AttentionReminder[] = [];
+  for (const thread of threads) {
+    const reminder = threadAttentionReminder(
+      environmentId,
+      thread,
+      nowMs,
+      subagentRequests.get(thread.id) ?? null,
+    );
+    if (reminder) reminders.push(reminder);
+  }
+  return reminders;
 }
 
 /**
@@ -83,9 +124,12 @@ export function planAttentionReminders(input: {
   for (const environment of input.environments) {
     known.set(environment.environmentId, environment.live);
     if (!environment.live) continue;
-    for (const thread of environment.threads) {
-      const reminder = threadAttentionReminder(environment.environmentId, thread, input.nowMs);
-      if (reminder) wanted.set(reminder.id, reminder);
+    for (const reminder of environmentAttentionReminders(
+      environment.environmentId,
+      environment.threads,
+      input.nowMs,
+    )) {
+      wanted.set(reminder.id, reminder);
     }
   }
   const schedule = [...wanted.values()].filter((reminder) => !input.scheduled.has(reminder.id));

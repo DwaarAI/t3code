@@ -98,3 +98,69 @@ describe("playNotificationSound", () => {
     expect(audio.started).toBe(1);
   });
 });
+
+describe("showTestNotification", () => {
+  class TestNotification extends EventTarget {
+    static sent: TestNotification[] = [];
+    close = vi.fn();
+    constructor(
+      readonly title: string,
+      readonly options: NotificationOptions,
+    ) {
+      super();
+      TestNotification.sent.push(this);
+    }
+  }
+
+  let focused = false;
+  const setBadge = vi.fn((_badge: { count: number; image: string | null }) => Promise.resolve());
+  const badgeCounts = () => setBadge.mock.calls.map(([badge]) => badge.count);
+
+  beforeEach(() => {
+    focused = false;
+    TestNotification.sent = [];
+    setBadge.mockClear();
+    vi.stubGlobal("Notification", TestNotification);
+    vi.stubGlobal(
+      "window",
+      Object.assign(new EventTarget(), {
+        focus: vi.fn(),
+        desktopBridge: { getClientPlatform: () => "darwin", setNotificationBadge: setBadge },
+      }),
+    );
+    vi.stubGlobal("document", { hasFocus: () => focused });
+  });
+
+  it("adds one to the thread badge while in the background, then clears on focus", async () => {
+    const { setNotificationBadge, showTestNotification } = await import("./threadNotifications");
+    setNotificationBadge(2);
+    expect(showTestNotification(false)).toBe(true);
+    expect(TestNotification.sent.map((notification) => notification.title)).toEqual([
+      "T3 Code test notification",
+    ]);
+
+    focused = true;
+    window.dispatchEvent(new Event("focus"));
+
+    expect(badgeCounts()).toEqual([2, 3, 2]);
+    expect(TestNotification.sent[0]?.close).toHaveBeenCalled();
+  });
+
+  it("keeps real thread notifications counted after the test clears", async () => {
+    const { setNotificationBadge, showTestNotification } = await import("./threadNotifications");
+    showTestNotification(false);
+    setNotificationBadge(1);
+    TestNotification.sent[0]?.dispatchEvent(new Event("click"));
+
+    expect(badgeCounts()).toEqual([1, 2, 1]);
+  });
+
+  it("leaves the badge alone when the app is already focused", async () => {
+    const { showTestNotification } = await import("./threadNotifications");
+    focused = true;
+    showTestNotification(false);
+
+    expect(setBadge).not.toHaveBeenCalled();
+    expect(TestNotification.sent).toHaveLength(1);
+  });
+});

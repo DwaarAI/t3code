@@ -78,6 +78,7 @@ import {
   ClockIcon,
   FolderIcon,
   GitBranchIcon,
+  HashIcon,
   ListFilterIcon,
   MessageCircleQuestionIcon,
   PinIcon,
@@ -171,6 +172,13 @@ import { environmentProjects } from "../state/projects";
 import { vcsEnvironment } from "../state/vcs";
 import { threadEnvironment } from "../state/threads";
 import { useEnvironmentQuery } from "../state/query";
+import { useEnvironmentFolders, useFolderThreadKeys } from "../state/folders";
+import { providerSessionRef } from "../state/providerSessionRef";
+import { useCopyProviderSession } from "../hooks/useCopyProviderSession";
+import { useFolderHandoff } from "../hooks/useFolderHandoff";
+import { useStartReview } from "../hooks/useStartReview";
+import { SidebarFolders } from "./folders/SidebarFolders";
+import { isFolderThreadKey } from "./folders/SidebarFolders.logic";
 import { useThreadSearch } from "../state/queries";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
@@ -383,6 +391,8 @@ type SidebarOptimisticDrop = {
 interface SidebarThreadPartitionInput {
   readonly threads: readonly EnvironmentThreadShell[];
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  /** Folder threads live under their folder, not in the flat list. */
+  readonly folderThreadKeys: ReadonlySet<string>;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly workingShelfEnabled: boolean;
@@ -452,6 +462,7 @@ function useSidebarThreads(input: {
   const { projectScopeKey, scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } =
     input;
   const threads = useThreadShells();
+  const folderThreadKeys = useFolderThreadKeys();
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const nowMinute = useNowMinute();
   // Snooze wake times are second-precise, so classifying with the quantized
@@ -491,6 +502,7 @@ function useSidebarThreads(input: {
   const partition = partitionSidebarThreads({
     threads,
     scopedProjectKeys,
+    folderThreadKeys,
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
@@ -582,9 +594,18 @@ function useSidebarThreads(input: {
 }
 
 function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
-  const { threads, scopedProjectKeys, serverConfigs, optimisticDrop, workingShelfEnabled } = input;
+  const {
+    threads,
+    scopedProjectKeys,
+    folderThreadKeys,
+    serverConfigs,
+    optimisticDrop,
+    workingShelfEnabled,
+  } = input;
   const preciseNow = new Date().toISOString();
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys).filter(
+    (thread) => !isFolderThreadKey(folderThreadKeys, thread),
+  );
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -916,6 +937,30 @@ function SidebarProviderStack(props: {
   );
 }
 
+/**
+ * The provider's own session id, so a thread can be found in `claude --resume`
+ * or `codex resume`. Fetched only while the hover card is open; copy it from
+ * the thread menu.
+ */
+function ThreadProviderSessionLine(props: { environmentId: EnvironmentId; threadId: ThreadId }) {
+  const ref = useEnvironmentQuery(
+    providerSessionRef.ref({
+      environmentId: props.environmentId,
+      input: { threadId: props.threadId },
+    }),
+  );
+  const sessionId = ref.data?.sessionId;
+  if (!sessionId) return null;
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <HashIcon className="size-3 shrink-0 stroke-muted-foreground" />
+      <span className="flex min-w-0 font-mono text-foreground/75">
+        <MiddleTruncate value={sessionId} />
+      </span>
+    </div>
+  );
+}
+
 function SidebarThreadTooltip({
   thread,
   project,
@@ -1023,6 +1068,9 @@ function SidebarThreadTooltip({
               Handed off from {previousProviderNames.join(", ")}
             </div>
           </div>
+        ) : null}
+        {thread.activeProviderThreadId !== null ? (
+          <ThreadProviderSessionLine environmentId={thread.environmentId} threadId={thread.id} />
         ) : null}
         {terminalStatus ? (
           <div className="flex min-w-0 items-center gap-2">
@@ -3004,6 +3052,35 @@ export default function Sidebar() {
     optimisticDrop,
     routeThreadKey,
   });
+  const folderThreadKeys = useFolderThreadKeys();
+  const reviewEnvironments = useEnvironmentFolders();
+  const handOff = useFolderHandoff();
+  const copyProviderSession = useCopyProviderSession();
+  const startReview = useStartReview();
+  const activeFolderWorktree = (() => {
+    if (routeDraftThread) {
+      return {
+        environmentId: routeDraftThread.environmentId,
+        projectId: routeDraftThread.projectId,
+        worktreePath: routeDraftThread.worktreePath,
+      };
+    }
+    // Folder threads are not in the flat list, so look in every thread.
+    const thread = routeThreadRef
+      ? threads.find(
+          (candidate) =>
+            candidate.environmentId === routeThreadRef.environmentId &&
+            candidate.id === routeThreadRef.threadId,
+        )
+      : undefined;
+    return thread
+      ? {
+          environmentId: thread.environmentId,
+          projectId: thread.projectId,
+          worktreePath: thread.worktreePath,
+        }
+      : null;
+  })();
 
   const isSearchingThreads = threadSearchQuery.trim().length > 0;
   const threadSearchMatchByKey = new Map(
@@ -4223,6 +4300,11 @@ export default function Sidebar() {
                 AuthOrchestrationOperateScope,
               ),
               branch: thread.branch ?? null,
+              hasProviderSession: thread.activeProviderThreadId !== null,
+              canHandoff: isFolderThreadKey(folderThreadKeys, thread),
+              canReview: reviewEnvironments.some(
+                (entry) => entry.environmentId === thread.environmentId,
+              ),
               projectFilter: threadProjectGroup
                 ? {
                     label: threadProjectGroup.displayName,
@@ -4274,6 +4356,12 @@ export default function Sidebar() {
                 environmentId: threadRef.environmentId,
                 projectId: thread.projectId,
               });
+            return;
+          case "handoff":
+            await handOff(thread);
+            return;
+          case "review":
+            await startReview(thread);
             return;
           case "new-thread-on-branch": {
             const result = await settlePromise(() =>
@@ -4373,6 +4461,15 @@ export default function Sidebar() {
             return;
           case "copy-thread-id":
             copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+            return;
+          case "copy-session-id":
+          case "copy-resume-command":
+            await copyProviderSession({
+              environmentId: thread.environmentId,
+              threadId: thread.id,
+              cwd: threadWorkspacePath,
+              what: clicked.value === "copy-session-id" ? "session-id" : "resume-command",
+            });
             return;
           case "archive": {
             if (confirmThreadArchive) {
@@ -4684,6 +4781,9 @@ export default function Sidebar() {
           </SidebarGroup>
         }
       >
+        {isSearchingThreads ? null : (
+          <SidebarFolders threads={threads} activeWorktree={activeFolderWorktree} />
+        )}
         <SidebarGroup className="flex-1" role="presentation">
           {isSearchingThreads ? (
             threadSearchResults.length > 0 ? (

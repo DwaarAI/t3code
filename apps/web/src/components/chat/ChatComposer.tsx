@@ -204,6 +204,7 @@ import {
   type TerminalContextSelection,
 } from "../../lib/terminalContext";
 import { useComposerPathSearch } from "../../lib/composerPathSearchState";
+import { useFolderForCwd, useFoldersForEnvironment } from "../../state/folders";
 import {
   replaceComposerContextReferences,
   toKindScopedComposerContextId,
@@ -2540,11 +2541,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
   const environmentThreadShells = useThreadShells(isPathTrigger);
-  const workspaceEntries = useComposerPathSearch({
-    environmentId,
-    cwd: isPathTrigger ? gitCwd : null,
-    query: isPathTrigger ? pathTriggerQuery : null,
-  });
+  const folderMatch = useFolderForCwd(environmentId, gitCwd);
+  const environmentFolders = useFoldersForEnvironment(environmentId);
+  const workspaceEntries = useComposerPathSearch(
+    {
+      environmentId,
+      cwd: isPathTrigger ? gitCwd : null,
+      query: isPathTrigger ? pathTriggerQuery : null,
+    },
+    {
+      context: folderMatch ? { cwd: folderMatch.folder.contextDir, label: ".context" } : null,
+      guides: environmentFolders ? { cwd: environmentFolders.guidesDir, label: "guides" } : null,
+    },
+  );
   const compactSlashCommandAvailable =
     composerTrigger?.kind === "slash-command" &&
     prompt.slice(0, composerTrigger.rangeStart).trim() === "" &&
@@ -2630,7 +2639,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           path: entry.path,
           pathKind: entry.kind,
           label: basenameOfPath(entry.path),
-          description: entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
+          description:
+            entry.sourceLabel ?? entry.path.slice(0, Math.max(0, entry.path.lastIndexOf("/"))),
         })),
       ];
     }

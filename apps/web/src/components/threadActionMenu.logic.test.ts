@@ -221,6 +221,40 @@ describe("buildThreadActionMenuItems", () => {
     );
     expect(archiveItem?.disabled).toBe(true);
   });
+
+  it("offers review, handoff and session copies only where they apply", () => {
+    const plain = allIds(baseState);
+    for (const id of ["review", "handoff", "copy-session-id", "copy-resume-command"]) {
+      expect(plain).not.toContain(id);
+    }
+    const folderThread = allIds({
+      ...baseState,
+      canReview: true,
+      canHandoff: true,
+      hasProviderSession: true,
+    });
+    expect(folderThread.slice(0, 2)).toEqual(["review", "handoff"]);
+    expect(folderThread).toEqual(
+      expect.arrayContaining(["copy-thread-id", "copy-session-id", "copy-resume-command"]),
+    );
+  });
+
+  it("keeps session copies but not review or handoff on a read-only connection", () => {
+    const items = buildThreadActionMenuItems({
+      ...baseState,
+      canOperate: false,
+      canReview: true,
+      canHandoff: true,
+      hasProviderSession: true,
+    });
+    const disabled = (id: string) =>
+      [...items, ...items.flatMap((item) => item.children ?? [])].find((item) => item.id === id)
+        ?.disabled === true;
+    expect(disabled("review")).toBe(true);
+    expect(disabled("handoff")).toBe(true);
+    expect(disabled("copy-session-id")).toBe(false);
+    expect(disabled("copy-resume-command")).toBe(false);
+  });
 });
 
 describe("buildDraftActionMenuItems", () => {

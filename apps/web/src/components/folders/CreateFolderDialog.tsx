@@ -5,7 +5,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, Folder, ProjectId } from "@t3tools/contracts";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { create } from "zustand";
 
 import { useStartFolderThread } from "../../hooks/useStartFolderThread";
@@ -37,6 +37,9 @@ type Request = {
   /** Set to add repositories to an existing folder instead of creating one. */
   readonly addTo: Folder | null;
 };
+// A stable empty list, so the default-branch effect does not rerun before refs load.
+const NO_REFS: ReadonlyArray<never> = [];
+
 const useRequest = create<{ request: Request | null }>(() => ({ request: null }));
 
 /** Opens the dialog; the sidebar, command palette, and keybinding all go through here. */
@@ -94,30 +97,22 @@ function CreateFolderDialog(props: {
     props.initialEnvironmentId ?? environments[0]?.environmentId ?? null,
   );
   const allProjects = useProjects();
-  const rootProjectIds = useMemo(
-    () =>
-      new Set(
-        environments.flatMap((environment) =>
-          environment.folders.flatMap((folder) =>
-            folder.rootProjectId ? [folder.rootProjectId as string] : [],
-          ),
-        ),
+  const rootProjectIds = new Set(
+    environments.flatMap((environment) =>
+      environment.folders.flatMap((folder) =>
+        folder.rootProjectId ? [folder.rootProjectId as string] : [],
       ),
-    [environments],
+    ),
   );
-  const projects = useMemo(
-    () =>
-      allProjects
-        .filter(
-          (project) =>
-            project.environmentId === environmentId &&
-            // A folder's own session project is not a repository to add.
-            !rootProjectIds.has(project.id) &&
-            !addTo?.members.some((member) => member.projectId === project.id),
-        )
-        .toSorted((a, b) => a.title.localeCompare(b.title)),
-    [addTo, allProjects, environmentId, rootProjectIds],
-  );
+  const projects = allProjects
+    .filter(
+      (project) =>
+        project.environmentId === environmentId &&
+        // A folder's own session project is not a repository to add.
+        !rootProjectIds.has(project.id) &&
+        !addTo?.members.some((member) => member.projectId === project.id),
+    )
+    .toSorted((a, b) => a.title.localeCompare(b.title));
   const [name, setName] = useState("");
   const [branch, setBranch] = useState("");
   const [baseBranches, setBaseBranches] = useState<ReadonlyMap<ProjectId, string | null>>(
@@ -355,7 +350,7 @@ function RepositoryRow(props: {
         })
       : null,
   );
-  const branches = useMemo(() => refs.data?.refs ?? [], [refs.data]);
+  const branches = refs.data?.refs ?? NO_REFS;
 
   // Default to the repository's default branch once the list arrives.
   useEffect(() => {
