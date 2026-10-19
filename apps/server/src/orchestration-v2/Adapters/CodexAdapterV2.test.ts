@@ -55,6 +55,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import packageJson from "../../../package.json" with { type: "json" };
 import * as ServerConfig from "../../config.ts";
+import { resolveProviderSessionContext } from "../../folder/folderLayout.ts";
+import { CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES } from "../../provider/CodexDeveloperInstructions.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -455,6 +457,39 @@ describe("CodexAdapterV2 runtime policy", () => {
 
       assert.equal(params.approvalPolicy, "on-request");
       assert.equal(params.sandboxPolicy?.type, "readOnly");
+    }),
+  );
+
+  it.effect("adds folder instructions and writable notes without the T3 MCP server", () =>
+    Effect.gen(function* () {
+      const foldersDir = "/home/someone-with-a-long-name/.t3/folders";
+      const sessionContext = resolveProviderSessionContext(`${foldersDir}/auth-revamp/api`, {
+        foldersDir,
+        guidesDir: "/home/someone-with-a-long-name/.t3/guides",
+      });
+      const build = (runtimeMode: "auto" | "auto-accept-edits" | "approval-required") =>
+        CodexAdapterV2.buildCodexTurnStartParams({
+          nativeThreadId: `native-folder-${runtimeMode}`,
+          codexInput: [{ type: "text", text: "test" }],
+          runtimePolicy: { runtimeMode, interactionMode: "default", cwd: null },
+          modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
+          sessionContext,
+        });
+
+      const auto = yield* build("auto");
+      const folderEntry = auto.additionalContext?.t3_code_session;
+      assert.equal(folderEntry?.kind, "application");
+      assert.include(folderEntry?.value ?? "", 'the "api" repository');
+      assert.isAtMost(
+        Buffer.byteLength(folderEntry?.value ?? "", "utf8"),
+        CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES,
+      );
+      assert.deepEqual(auto.sandboxPolicy, {
+        type: "workspaceWrite",
+        writableRoots: [`${foldersDir}/auth-revamp/.context`],
+      });
+      assert.deepEqual((yield* build("auto-accept-edits")).sandboxPolicy, auto.sandboxPolicy);
+      assert.deepEqual((yield* build("approval-required")).sandboxPolicy, { type: "readOnly" });
     }),
   );
 
@@ -1756,6 +1791,7 @@ describe("CodexAdapterV2 session initialize", () => {
   const openReplaySession = (
     transcript: CodexReplay.CodexAppServerReplayTranscript,
     beforeEmitInbound?: CodexReplay.CodexAppServerReplayDriver["beforeEmitInbound"],
+    extraSkillRoots?: ReadonlyArray<string>,
   ) =>
     Effect.gen(function* () {
       const driver = yield* CodexReplay.makeReplayDriver(
@@ -1797,6 +1833,7 @@ describe("CodexAdapterV2 session initialize", () => {
         fileSystem: yield* FileSystem.FileSystem,
         idAllocator: yield* IdAllocator.IdAllocatorV2,
         serverConfig: yield* makeReplayServerConfig(transcript.scenario).pipe(Effect.orDie),
+        ...(extraSkillRoots === undefined ? {} : { extraSkillRoots }),
       });
       const runtime = yield* adapter.openSession({
         threadId: ThreadId.make(`thread-${transcript.scenario}`),
@@ -1817,6 +1854,42 @@ describe("CodexAdapterV2 session initialize", () => {
 
   const replayPreamble = (nativeThreadId: string) =>
     codexReplayPreamble({ nativeThreadId, nativeTurnId: "unused", prompt: "unused" });
+
+  it.effect("points the app-server at T3's built-in skills right after initializing", () =>
+    Effect.gen(function* () {
+      const preamble = replayPreamble("skill-roots-thread");
+      // The transcript fails on any frame out of order, so passing proves the
+      // request is sent between `initialized` and the first thread.
+      const session = yield* openReplaySession(
+        makeCodexReplayTranscript({
+          scenario: "extra-skill-roots",
+          entries: [
+            ...preamble.slice(0, 3),
+            {
+              type: "expect_outbound",
+              label: "skills/extraRoots/set",
+              frame: {
+                id: 2,
+                method: "skills/extraRoots/set",
+                params: { extraRoots: ["/t3/skills/skills"] },
+              },
+            },
+            { type: "emit_inbound", label: "skills/extraRoots/set", frame: { id: 2, result: {} } },
+            ...preamble.slice(3, 5).map((entry) => withReplayRequestId(entry, 3)),
+          ],
+        }),
+        undefined,
+        ["/t3/skills/skills"],
+      );
+      yield* session.ensureThread("thread-skill-roots");
+      assert.equal(session.initializeRequests(), 1);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
 
   it.effect("sends one initialize when two threads start on a fresh session at once", () =>
     Effect.gen(function* () {

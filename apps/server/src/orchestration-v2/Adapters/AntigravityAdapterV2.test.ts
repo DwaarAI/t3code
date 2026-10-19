@@ -135,6 +135,59 @@ const layerSession = Layer.mergeAll(
 );
 
 describe("AntigravityAdapterV2 client file system", () => {
+  it.effect("grants the host's session directories to the agent and its file requests", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const base = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-antigravity-folder-" });
+      const guidesDir = path.join(base, "guides");
+      const folderDir = path.join(base, "folders", "auth");
+      const cwd = path.join(folderDir, "api");
+      const siblingFile = path.join(folderDir, "web", "notes.txt");
+      yield* fileSystem.makeDirectory(cwd, { recursive: true });
+      yield* fileSystem.makeDirectory(path.dirname(siblingFile), { recursive: true });
+      yield* fileSystem.writeFileString(siblingFile, "web notes");
+      const testHost = yield* ProviderHost.ProviderHost;
+      const host: ProviderHost.ProviderHost["Service"] = {
+        ...testHost,
+        sessionContext: () => ({
+          instructions: null,
+          readableDirs: [guidesDir, folderDir],
+          writableDirs: [],
+        }),
+      };
+      const launches: Array<{ readonly additionalDirectories?: ReadonlyArray<string> }> = [];
+      const folderFlavor = makeAntigravityAcpAdapterFlavor({
+        instanceId: ProviderInstanceId.make("antigravity-folder-test"),
+        crypto: yield* Crypto.Crypto,
+        fileSystem,
+        path,
+        host,
+        selfInvocation: undefined as never,
+        makeRuntime: (input) => {
+          launches.push(input);
+          return Effect.die("not spawned in this test");
+        },
+        withProcess: (_stop, task) => task,
+        defaultModel: Effect.succeed(undefined),
+      });
+
+      yield* folderFlavor
+        .makeRuntime({ cwd } as Parameters<typeof folderFlavor.makeRuntime>[0])
+        .pipe(Effect.exit);
+      assert.deepEqual(launches[0]?.additionalDirectories, [
+        testHost.paths.attachmentsDir,
+        guidesDir,
+        folderDir,
+      ]);
+      const read = yield* folderFlavor.clientFileSystem!.readTextFile(
+        { sessionId: "session-1", path: siblingFile },
+        cwd,
+      );
+      assert.equal(read.content, "web notes");
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+
   it.effect("confines agent file requests to the workspace under full access", () =>
     Effect.gen(function* () {
       const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;

@@ -12,11 +12,13 @@ import {
   completeCodexTurnTokenUsage,
   type CodexTurnTokenUsageState,
 } from "../../provider/CodexTurnTokenUsage.ts";
+import type { ProviderSessionContext } from "@t3tools/provider-core/server/ProviderHost";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import type { CodexEffectiveRuntime } from "../../provider/CodexManagedRuntime.ts";
 import {
   buildCodexInitializeParams,
   codexAppServerEnvironment,
+  setCodexExtraSkillRoots,
 } from "../../provider/CodexProvider.ts";
 import {
   codexRateLimitsToUpdate,
@@ -95,6 +97,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { resolveAttachmentPath, resolveAttachmentPathById } from "../../attachmentStore.ts";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import { ServerConfig } from "../../config.ts";
+import { resolveProviderSessionContext } from "../../folder/folderLayout.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import {
   buildCodexAdditionalContext,
@@ -723,6 +726,7 @@ export function buildCodexTurnStartParams(input: {
   /** ChatGPT token sharing does not accept service tiers. */
   readonly omitServiceTier?: boolean;
   readonly appContext?: ProviderAdapter.ProviderAdapterV2TurnInput["appContext"];
+  readonly sessionContext?: ProviderSessionContext;
 }) {
   return Effect.gen(function* () {
     const runtimeModeDefaults = codexRuntimeModeTurnDefaults(input.runtimePolicy.runtimeMode);
@@ -730,10 +734,18 @@ export function buildCodexTurnStartParams(input: {
       input.runtimePolicy.approvalPolicy === undefined
         ? runtimeModeDefaults.approvalPolicy
         : yield* decodeTurnApprovalPolicy(input.runtimePolicy.approvalPolicy);
-    const sandboxPolicy =
+    const requestedSandboxPolicy =
       input.runtimePolicy.sandboxPolicy === undefined
         ? runtimeModeDefaults.sandboxPolicy
         : yield* decodeTurnSandboxPolicy(input.runtimePolicy.sandboxPolicy);
+    const extraWritableRoots = input.sessionContext?.writableDirs ?? [];
+    const sandboxPolicy =
+      requestedSandboxPolicy?.type === "workspaceWrite" && extraWritableRoots.length > 0
+        ? {
+            ...requestedSandboxPolicy,
+            writableRoots: [...(requestedSandboxPolicy.writableRoots ?? []), ...extraWritableRoots],
+          }
+        : requestedSandboxPolicy;
     const selectedEffort = getModelSelectionStringOptionValue(
       input.modelSelection,
       "reasoningEffort",
@@ -767,10 +779,16 @@ export function buildCodexTurnStartParams(input: {
             },
           )
         : undefined;
+    // Host instructions ride in additionalContext rather than
+    // developer_instructions, which models with their own mode text drop.
+    const sessionInstructions = input.sessionContext?.instructions;
+    const hostContext = sessionInstructions
+      ? { t3_code_session: { kind: "application" as const, value: sessionInstructions } }
+      : undefined;
     const additionalContext =
-      t3Context === undefined && Object.keys(appContext).length === 0
+      t3Context === undefined && hostContext === undefined && Object.keys(appContext).length === 0
         ? undefined
-        : { ...t3Context, ...appContext };
+        : { ...t3Context, ...hostContext, ...appContext };
     const collaborationMode: CodexSchema.ClientRequest__CollaborationMode | undefined =
       input.runtimePolicy.interactionMode !== "plan" && developerInstructions === undefined
         ? undefined
@@ -1566,7 +1584,7 @@ export type CodexAdapterV2DriverEnv =
 
 export const createCodexAdapterV2 = (
   { instanceId, environment, enabled, config }: ProviderAdapterDriverCreateInput<CodexSettings>,
-  hooks: Pick<CodexAdapterV2Options, "onUsageLimits" | "resolveRuntime"> = {},
+  hooks: Pick<CodexAdapterV2Options, "onUsageLimits" | "resolveRuntime" | "extraSkillRoots"> = {},
 ) =>
   Effect.gen(function* () {
     const clientFactory = yield* CodexAppServerClientFactory;
@@ -1663,6 +1681,8 @@ export interface CodexAdapterV2Options {
   readonly fileSystem: FileSystem.FileSystem;
   readonly idAllocator: IdAllocator.IdAllocatorV2["Service"];
   readonly serverConfig: ServerConfig["Service"];
+  /** Skill directories Codex scans besides its own, such as T3's built-ins. */
+  readonly extraSkillRoots?: ReadonlyArray<string>;
   /**
    * Optional: adapters that omit it keep projection-only handling for late item
    * completions.
@@ -1780,6 +1800,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 }),
               );
             yield* client.notify("initialized", undefined);
+            yield* setCodexExtraSkillRoots(client, adapterOptions.extraSkillRoots);
             yield* Ref.set(initialized, true);
           }),
         );
@@ -6203,6 +6224,10 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               deviceToolsAvailable: mcpSession?.capabilities?.has("device") ?? false,
               omitServiceTier: adapterOptions.resolveRuntime !== undefined,
               ...(turnInput.appContext === undefined ? {} : { appContext: turnInput.appContext }),
+              sessionContext: resolveProviderSessionContext(
+                turnInput.runtimePolicy.cwd,
+                serverConfig,
+              ),
             });
             yield* Ref.update(pendingRootTurns, (current) => {
               const updated = new Map(current);

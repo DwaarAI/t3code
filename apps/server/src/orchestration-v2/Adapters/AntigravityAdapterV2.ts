@@ -118,8 +118,14 @@ interface AntigravityFlavorServices {
 export function makeAntigravityAcpAdapterFlavor(
   options: AntigravityAdapterV2Options & AntigravityFlavorServices,
 ): AcpAdapterV2Flavor {
+  // Antigravity gates every file access by directory, so the host's extra
+  // session directories (shared guides, a folder's siblings) are granted too.
+  const extraDirectories = (cwd: string | null) => [
+    options.host.paths.attachmentsDir,
+    ...options.host.sessionContext(cwd).readableDirs,
+  ];
   const antigravityClientFileRoots = (cwd: string | null) =>
-    cwd === null ? [options.host.paths.attachmentsDir] : [cwd, options.host.paths.attachmentsDir];
+    cwd === null ? extraDirectories(cwd) : [cwd, ...extraDirectories(cwd)];
   const makeRuntime = (input: AcpAdapterV2RuntimeInput) =>
     Effect.gen(function* () {
       const scope = yield* Scope.fork(yield* Effect.scope);
@@ -129,7 +135,7 @@ export function makeAntigravityAcpAdapterFlavor(
           options.makeRuntime({
             ...input,
             clientFileSystem: true,
-            additionalDirectories: [options.host.paths.attachmentsDir],
+            additionalDirectories: extraDirectories(input.cwd),
           }),
         )
         .pipe(Effect.provideService(Scope.Scope, scope));

@@ -13,6 +13,7 @@ export interface TestProviderHostOptions {
   readonly cwd?: string;
   readonly settings?: ServerSettings;
   readonly runBackgroundWork?: boolean;
+  readonly sessionContext?: ProviderHost.ProviderHost["Service"]["sessionContext"];
 }
 
 export class TestProviderHostSettings extends Context.Service<
@@ -58,6 +59,9 @@ export const layer = (
         },
         shouldRunBackgroundWork: () => Effect.succeed(options.runBackgroundWork ?? true),
         resolveAttachmentPath: (attachment) => path.join(attachmentsDir, attachment.id),
+        sessionContext:
+          options.sessionContext ??
+          (() => ({ instructions: null, readableDirs: [], writableDirs: [] })),
         credentials: (namespace, bindingId) =>
           Effect.sync(() => {
             const key = `${namespace}:${bindingId}`;

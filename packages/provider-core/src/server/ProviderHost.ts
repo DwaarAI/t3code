@@ -29,6 +29,23 @@ export interface ProviderCredentials {
   readonly remove: Effect.Effect<void, ProviderCredentialError>;
 }
 
+/**
+ * Extra context the host gives a session in a given cwd, beyond the cwd itself:
+ * folder worktrees bring instructions and sibling directories, and every session
+ * may read the shared guides users attach to messages.
+ */
+export interface ProviderSessionContext {
+  /** Appended to the session's runtime or system instructions. */
+  readonly instructions: string | null;
+  /** Directories outside the cwd the agent may read, for providers that gate reads. */
+  readonly readableDirs: ReadonlyArray<string>;
+  /**
+   * Directories outside the cwd the agent's sandbox must let it write, for
+   * providers that read anywhere. Each lies inside a readable directory.
+   */
+  readonly writableDirs: ReadonlyArray<string>;
+}
+
 export class ProviderHost extends Context.Service<
   ProviderHost,
   {
@@ -49,6 +66,7 @@ export class ProviderHost extends Context.Service<
      * resolve inside the attachments directory.
      */
     readonly resolveAttachmentPath: (attachment: ChatAttachment) => string | null;
+    readonly sessionContext: (cwd: string | null | undefined) => ProviderSessionContext;
     readonly credentials: (
       namespace: string,
       bindingId: string,

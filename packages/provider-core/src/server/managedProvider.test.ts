@@ -118,6 +118,7 @@ function layerProviderHost(input: {
       },
       shouldRunBackgroundWork: () => Effect.succeed(input.runBackgroundWork),
       resolveAttachmentPath: () => null,
+      sessionContext: () => ({ instructions: null, readableDirs: [], writableDirs: [] }),
       credentials: () => Effect.die("unused"),
     }),
   );

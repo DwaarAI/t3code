@@ -1284,6 +1284,101 @@ describe("ClaudeAdapterV2 executable path", () => {
   );
 });
 
+describe("ClaudeAdapterV2 host session context", () => {
+  it.effect("grants a folder worktree its folder and guides and loads the t3 skills plugin", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const serverConfig = yield* ServerConfig.ServerConfig;
+        const cwd = path.join(serverConfig.foldersDir, "auth", "api");
+        const opened: Array<ClaudeAdapterV2.ClaudeAgentSdkQueryOptions> = [];
+        const adapter = yield* ClaudeAdapterV2.createClaudeAdapterV2(
+          {
+            instanceId: ClaudeAdapterV2.CLAUDE_DEFAULT_INSTANCE_ID,
+            displayName: undefined,
+            environment: [],
+            enabled: true,
+            config: DEFAULT_CLAUDE_SETTINGS,
+          },
+          {},
+        ).pipe(
+          Effect.provideService(ClaudeAdapterV2.ClaudeAgentSdkQueryRunner, {
+            allocateSessionId: Effect.succeed("native-thread-claude-folder"),
+            open: (input) =>
+              Effect.sync(() => {
+                opened.push(input.options);
+                return {
+                  messages: Stream.never,
+                  offer: () => Effect.void,
+                  setModel: () => Effect.void,
+                  applyFlagSettings: () => Effect.void,
+                  setPermissionMode: () => Effect.void,
+                  backgroundTasks: () => Effect.succeed(false),
+                  stopTask: () => Effect.void,
+                  interrupt: Effect.void,
+                  close: Effect.void,
+                };
+              }),
+            forkSession: () => Effect.die("unused"),
+            subagentLaunchToolUseId: () => Effect.succeed(null),
+            assertComplete: Effect.void,
+          }),
+        );
+        const runtimePolicy = { ...CLAUDE_TEST_RUNTIME_POLICY, cwd };
+        const threadId = ThreadId.make("thread-claude-folder");
+        const runtime = yield* adapter.openSession({
+          threadId,
+          providerSessionId: ProviderSessionId.make("provider-session-claude-folder"),
+          modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+          runtimePolicy,
+        });
+        const providerThread = yield* runtime.ensureThread({
+          threadId,
+          modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+          runtimePolicy,
+        });
+        yield* runtime.startTurn({
+          ...makeClaudeTestTurnInput({
+            threadId,
+            providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make("attempt-claude-folder"),
+            text: "hello",
+            attachments: [],
+          }),
+          runtimePolicy,
+        });
+
+        const options = opened[0];
+        assert.deepEqual(options?.additionalDirectories, [
+          cwd,
+          serverConfig.attachmentsDir,
+          serverConfig.guidesDir,
+          path.join(serverConfig.foldersDir, "auth"),
+        ]);
+        assert.deepEqual(options?.plugins, [
+          { type: "local", path: serverConfig.skillsDir, skipMcpDiscovery: true },
+        ]);
+        const systemPrompt = options?.systemPrompt;
+        assert.include(
+          typeof systemPrompt === "object" && "append" in systemPrompt
+            ? systemPrompt.append
+            : undefined,
+          'the "api" repository of the T3 Code folder "auth"',
+        );
+      }),
+    ).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          IdAllocator.layer,
+          McpProviderSessions.layer,
+          ServerConfig.layerTest(process.cwd(), { prefix: "t3-claude-folder-" }),
+        ).pipe(Layer.provideMerge(NodeServices.layer)),
+      ),
+    ),
+  );
+});
+
 describe("ClaudeAdapterV2 resumeThread", () => {
   it.effect("fails for a transcript without messages so a fresh session replaces it", () =>
     Effect.scoped(

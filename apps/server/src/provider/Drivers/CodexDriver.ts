@@ -176,7 +176,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv, Path.Pat
           enabled,
           config,
         },
-        { onUsageLimits: (update) => snapshot.applyUsageLimits(update) },
+        { onUsageLimits: (update) => snapshot.applyUsageLimits(update), extraSkillRoots },
       ).pipe(
         Effect.mapError(
           (cause) =>

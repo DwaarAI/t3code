@@ -169,6 +169,7 @@ const makeOpenCodeRuntimeHarness = Effect.fn("makeOpenCodeRuntimeHarness")(funct
     Effect.provideService(ProviderHost.ProviderHost, {
       paths: { cwd: "/workspace" },
       resolveAttachmentPath: () => null,
+      sessionContext: () => ({ instructions: null, readableDirs: [], writableDirs: [] }),
     } as unknown as ProviderHost.ProviderHost["Service"]),
   );
   const runtime = yield* adapter.openSession({
@@ -1613,6 +1614,7 @@ describe("OpenCodeAdapterV2", () => {
         Effect.provideService(ProviderHost.ProviderHost, {
           paths: { cwd: "/workspace" },
           resolveAttachmentPath: () => null,
+          sessionContext: () => ({ instructions: null, readableDirs: [], writableDirs: [] }),
         } as unknown as ProviderHost.ProviderHost["Service"]),
       );
       const threadId = ThreadId.make("thread-opencode-admission-race");
@@ -1910,6 +1912,7 @@ describe("OpenCodeAdapterV2", () => {
         Effect.provideService(ProviderHost.ProviderHost, {
           paths: { cwd: "/workspace" },
           resolveAttachmentPath: () => null,
+          sessionContext: () => ({ instructions: null, readableDirs: [], writableDirs: [] }),
         } as unknown as ProviderHost.ProviderHost["Service"]),
       );
       const threadId = ThreadId.make("thread-opencode-initial-stop");

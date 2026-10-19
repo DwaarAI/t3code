@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import { ChildProcessSpawner } from "effect/process";
 import { makeCodexTextGeneration } from "../../textGeneration/CodexTextGeneration.ts";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
+import * as ServerConfig from "../../config.ts";
 import { chatGptModels } from "../CodexChatGptModels.ts";
 import { makeCodexManagedRuntime } from "../CodexManagedRuntime.ts";
 import { ProviderDriverError } from "../Errors.ts";
@@ -230,6 +231,7 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
   const orchestrationAdapter = yield* createCodexAdapterV2(input, {
     onUsageLimits: (update) => snapshot.applyUsageLimits(update),
     resolveRuntime: runtime.resolve,
+    extraSkillRoots: [(yield* ServerConfig.ServerConfig).skillRootsDir],
   }).pipe(
     Effect.mapError(
       (cause) =>

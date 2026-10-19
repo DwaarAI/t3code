@@ -363,6 +363,133 @@ describe("CursorAdapterV2", () => {
     ),
   );
 
+  it.effect("appends the host's session instructions for the turn's cwd to the prompt", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const workspace = yield* fileSystem.makeTempDirectoryScoped({ prefix: "cursor-v2-folder-" });
+      const sentMessages: Array<string> = [];
+      const instanceId = ProviderInstanceId.make("cursor");
+      const threadId = ThreadId.make("cursor-folder-thread");
+      const modelSelection = { instanceId, model: "composer-2.5" };
+      const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        cwd: workspace,
+      });
+      const adapter = yield* makeCursorAdapterV2({
+        instanceId,
+        settings: yield* decodeCursorSettings({}),
+        environment: { HOME: workspace },
+      }).pipe(
+        Effect.provideService(CursorAgentSdk.CursorAgentSdkRunner, {
+          assertComplete: Effect.void,
+          open: () =>
+            Effect.succeed({
+              agentId: "native-cursor-folder",
+              listMessages: Effect.succeed([]),
+              close: Effect.void,
+              send: (input) =>
+                Effect.sync(() => {
+                  sentMessages.push(
+                    typeof input.message === "string" ? input.message : input.message.text,
+                  );
+                  return {
+                    agentId: "native-cursor-folder",
+                    runId: "native-cursor-run",
+                    wait: Effect.succeed({
+                      id: "native-cursor-run",
+                      requestId: "native-request",
+                      status: "finished" as const,
+                      model: { id: "composer-2.5" },
+                      durationMs: 1,
+                    }),
+                    cancel: Effect.void,
+                  };
+                }),
+            }),
+        }),
+        Effect.provide(
+          TestProviderHost.layer({
+            cwd: workspace,
+            sessionContext: (cwd) => ({
+              instructions: cwd === workspace ? "<t3_folder>shared notes</t3_folder>" : null,
+              readableDirs: [],
+              writableDirs: [],
+            }),
+          }),
+        ),
+      );
+      const runtime = yield* adapter.openSession({
+        threadId,
+        providerSessionId: ProviderSessionId.make("cursor-folder-session"),
+        modelSelection,
+        runtimePolicy,
+      });
+      const providerThread = yield* runtime.ensureThread({
+        threadId,
+        modelSelection,
+        runtimePolicy,
+      });
+      const now = yield* DateTime.now;
+      yield* runtime.startTurn({
+        threadId,
+        providerThread,
+        modelSelection,
+        runtimePolicy,
+        runId: RunId.make("cursor-folder-run"),
+        runOrdinal: 1,
+        providerTurnOrdinal: 1,
+        attemptId: RunAttemptId.make("cursor-folder-attempt"),
+        rootNodeId: NodeId.make("cursor-folder-root"),
+        appThread: {
+          id: threadId,
+          projectId: ProjectId.make("cursor-folder-project"),
+          createdBy: "user",
+          creationSource: "web",
+          title: "Cursor folder",
+          providerInstanceId: instanceId,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          activeProviderThreadId: providerThread.id,
+          lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+          forkedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+          archivedAt: null,
+          settledOverride: null,
+          settledAt: null,
+          lastVisitedAt: null,
+          deletedAt: null,
+        },
+        message: {
+          messageId: MessageId.make("cursor-folder-message"),
+          createdBy: "user",
+          creationSource: "web",
+          text: "hi",
+          attachments: [],
+        },
+      });
+      yield* runtime.events.pipe(
+        Stream.filter((event) => event.type === "turn.terminal"),
+        Stream.runHead,
+      );
+      assert.lengthOf(sentMessages, 1);
+      assert.match(sentMessages[0] ?? "", /^hi\n\n<runtime_info>/);
+      assert.match(
+        sentMessages[0] ?? "",
+        /<\/pull_request_linking>\n\n<t3_folder>shared notes<\/t3_folder>$/,
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(NodeServices.layer, IdAllocator.layer, McpProviderSessions.layer),
+      ),
+    ),
+  );
+
   it.effect("fails standalone SDK transport diagnostics and sends compaction as /compress", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;

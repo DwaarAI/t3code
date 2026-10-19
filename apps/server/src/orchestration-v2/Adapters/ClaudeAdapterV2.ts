@@ -120,6 +120,7 @@ import {
   type CompiledClaudeModelSelection,
 } from "../../claudeModelOptions.ts";
 import * as ServerConfig from "../../config.ts";
+import { resolveProviderSessionContext } from "../../folder/folderLayout.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
 import {
@@ -146,6 +147,7 @@ import {
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
 import { T3_CODE_ORCHESTRATION_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
+import type { ProviderSessionContext } from "@t3tools/provider-core/server/ProviderHost";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import {
   mcpToolPresentation,
@@ -1102,6 +1104,9 @@ export function makeClaudeQueryOptions(input: {
   readonly resumeSessionAt?: string;
   readonly cwd: string | null;
   readonly attachmentsDir?: string;
+  readonly sessionContext?: ProviderSessionContext;
+  /** T3's built-in skills, loaded as the local `t3` plugin. */
+  readonly skillsPluginDir?: string;
   readonly settings?: ClaudeSettings;
   readonly sdkSettings?: string | ClaudeSdkSettings;
   readonly environment?: NodeJS.ProcessEnv;
@@ -1197,14 +1202,21 @@ export function makeClaudeQueryOptions(input: {
       type: "preset" as const,
       preset: "claude_code" as const,
       append:
-        buildRuntimeInstructions({ harness: "Claude Code" }) +
-        (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
+        buildRuntimeInstructions({
+          harness: "Claude Code",
+          extraInstructions: input.sessionContext?.instructions,
+        }) + (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
     },
+    // T3 owns MCP wiring, so the skills plugin never brings servers of its own.
+    ...(input.skillsPluginDir === undefined
+      ? {}
+      : { plugins: [{ type: "local", path: input.skillsPluginDir, skipMcpDiscovery: true }] }),
     ...(Object.keys(extraArgs).length === 0 ? {} : { extraArgs }),
   };
   const additionalDirectories = [
     ...(input.cwd === null ? [] : [input.cwd]),
     ...(input.attachmentsDir === undefined ? [] : [input.attachmentsDir]),
+    ...(input.sessionContext?.readableDirs ?? []),
   ];
   const withDirectories =
     additionalDirectories.length === 0 ? options : { ...options, additionalDirectories };
@@ -3421,6 +3433,9 @@ export interface ClaudeAdapterV2Options {
   readonly settings: ClaudeSettings;
   readonly environment: NodeJS.ProcessEnv;
   readonly attachmentsDir: string;
+  readonly sessionContext?: (cwd: string | null) => ProviderSessionContext;
+  /** `ServerConfig.skillsDir` and `skillRootsDir`: T3's built-in skills plugin. */
+  readonly builtinSkills?: { readonly pluginDir: string; readonly skillRootsDir: string };
   readonly fileSystem: FileSystem.FileSystem;
   readonly path: Path.Path;
   readonly crypto: Crypto.Crypto;
@@ -3453,6 +3468,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
       adapterOptions.settings,
       cwd ?? undefined,
       adapterOptions.environment,
+      adapterOptions.builtinSkills?.skillRootsDir,
     ).pipe(
       Effect.map(
         (skills) =>
@@ -8524,6 +8540,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(resumeSessionAt === undefined ? {} : { resumeSessionAt }),
             cwd: turnInput.runtimePolicy.cwd,
             attachmentsDir,
+            ...(adapterOptions.sessionContext === undefined
+              ? {}
+              : { sessionContext: adapterOptions.sessionContext(turnInput.runtimePolicy.cwd) }),
+            ...(adapterOptions.builtinSkills === undefined
+              ? {}
+              : { skillsPluginDir: adapterOptions.builtinSkills.pluginDir }),
             settings: adapterOptions.settings,
             environment: adapterOptions.environment,
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
@@ -9588,6 +9610,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
   });
 });
 
+const builtinSessionOptions = (
+  serverConfig: ServerConfig.ServerConfig["Service"],
+): Pick<ClaudeAdapterV2Options, "sessionContext" | "builtinSkills"> => ({
+  sessionContext: (cwd) => resolveProviderSessionContext(cwd, serverConfig),
+  builtinSkills: { pluginDir: serverConfig.skillsDir, skillRootsDir: serverConfig.skillRootsDir },
+});
+
 export type ClaudeAdapterV2DriverEnv =
   | ClaudeAgentSdkQueryRunner
   | Crypto.Crypto
@@ -9622,6 +9651,7 @@ export const createClaudeAdapterV2 = Effect.fn("ClaudeAdapterV2Driver.create")(
       settings: { ...config, enabled, binaryPath },
       environment: claudeEnvironment,
       attachmentsDir: serverConfig.attachmentsDir,
+      ...builtinSessionOptions(serverConfig),
       fileSystem,
       path,
       crypto,
@@ -9670,6 +9700,7 @@ const makeDefaultClaudeAdapterV2 = Effect.fn("ClaudeAdapterV2.layer")(function* 
     settings: DEFAULT_CLAUDE_SETTINGS,
     environment: hostEnvironment,
     attachmentsDir: serverConfig.attachmentsDir,
+    ...builtinSessionOptions(serverConfig),
     fileSystem,
     path,
     crypto,

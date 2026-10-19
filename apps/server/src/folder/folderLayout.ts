@@ -9,6 +9,7 @@ import type {
   OrchestrationV2ConversationMessage,
   OrchestrationV2PlanArtifact,
 } from "@t3tools/contracts";
+import type { ProviderSessionContext } from "@t3tools/provider-core/server/ProviderHost";
 import type * as Path from "effect/Path";
 
 export const FOLDER_MANIFEST_FILE = "folder.json";
@@ -88,6 +89,23 @@ export function resolveFolderSessionContext(
   // A folder session's cwd is the folder itself, which already covers everything.
   if (scope.repoName === null) return { instructions, accessDirs: [], writableDirs: [] };
   return { instructions, accessDirs: [scope.folderDir], writableDirs: [scope.contextDir] };
+}
+
+/**
+ * The `ProviderHost.sessionContext` every provider session gets: folder
+ * instructions and directories when `cwd` is in a folder, plus read access to
+ * the shared guides.
+ */
+export function resolveProviderSessionContext(
+  cwd: string | null | undefined,
+  config: { readonly foldersDir: string; readonly guidesDir: string },
+): ProviderSessionContext {
+  const folder = resolveFolderSessionContext(cwd ?? undefined, config);
+  return {
+    instructions: folder?.instructions ?? null,
+    readableDirs: [config.guidesDir, ...(folder?.accessDirs ?? [])],
+    writableDirs: folder?.writableDirs ?? [],
+  };
 }
 
 /** Pick a worktree directory name that no other member of the folder uses. */

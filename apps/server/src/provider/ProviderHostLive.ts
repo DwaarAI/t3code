@@ -8,6 +8,7 @@ import { resolveAttachmentPath } from "../attachmentStore.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../config.ts";
+import { resolveProviderSessionContext } from "../folder/folderLayout.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as ProviderCredentialStore from "./ProviderCredentialStore.ts";
 
@@ -36,6 +37,7 @@ export const layer = Layer.effect(
       shouldRunBackgroundWork: backgroundPolicy.shouldRunScopeWork,
       resolveAttachmentPath: (attachment) =>
         resolveAttachmentPath({ attachmentsDir: config.attachmentsDir, attachment }),
+      sessionContext: (cwd) => resolveProviderSessionContext(cwd, config),
       credentials: (namespace, bindingId) =>
         ProviderCredentialStore.make(namespace, bindingId).pipe(
           Effect.map((store) => ({
