@@ -7,6 +7,7 @@ import { Platform } from "react-native";
 import type { SearchBarCommands } from "react-native-screens";
 import { NativePrimaryColumnContext } from "../../native/v5-workspace-context";
 import { useUniwindTheme } from "../../lib/useUniwindTheme";
+import { useFoldersSupported } from "../../state/folders";
 import { useHardwareKeyboardCommand } from "../keyboard/hardwareKeyboardCommands";
 import { withNativeGlassHeaderItem } from "../layout/native-glass-header-items";
 import { createNativeMailSearchToolbarItem } from "../layout/native-mail-search-toolbar";
@@ -43,6 +44,8 @@ export function HomeHeader(props: HomeHeaderProps) {
     [navigation],
   );
   const iconColor = useUniwindTheme()["--color-icon"];
+  const foldersSupported = useFoldersSupported();
+  const openFolders = () => navigation.navigate("Folders");
   const hasCustomListOptions =
     props.selectedEnvironmentId !== null || props.selectedProjectKey !== null;
   const focusSearch = useCallback(() => {
@@ -64,7 +67,7 @@ export function HomeHeader(props: HomeHeaderProps) {
   return (
     <>
       <NativeStackScreenOptions
-        optionsVersion={[filterMenu.items, showsCompactCompose]}
+        optionsVersion={[filterMenu.items, showsCompactCompose, foldersSupported]}
         options={{
           headerTintColor: iconColor,
           unstable_headerRightItems: () =>
@@ -76,6 +79,7 @@ export function HomeHeader(props: HomeHeaderProps) {
                       : "line.3.horizontal.decrease.circle",
                     filterMenu,
                     onOpenSettings: props.onOpenSettings,
+                    ...(foldersSupported ? { onOpenFolders: openFolders } : {}),
                   }),
                   ...(showsCompactCompose
                     ? [
@@ -92,6 +96,18 @@ export function HomeHeader(props: HomeHeaderProps) {
                     : []),
                 ]
               : [
+                  ...(foldersSupported
+                    ? [
+                        withNativeGlassHeaderItem({
+                          accessibilityLabel: "Open folders",
+                          icon: { name: "folder", type: "sfSymbol" } as const,
+                          identifier: "home-folders",
+                          label: "",
+                          onPress: openFolders,
+                          type: "button",
+                        }),
+                      ]
+                    : []),
                   withNativeGlassHeaderItem({
                     accessibilityLabel: "Open settings",
                     icon: { name: "ellipsis", type: "sfSymbol" } as const,

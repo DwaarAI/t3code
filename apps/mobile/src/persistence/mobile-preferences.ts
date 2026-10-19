@@ -24,7 +24,6 @@ import * as MobileSecureStorage from "./mobile-secure-storage";
 import { MobileStorageDecodeError, MobileStorageEncodeError } from "./mobile-storage";
 
 const PREFERENCES_KEY = "t3code.preferences";
-const isAttentionReminderMinutes = Schema.is(AttentionReminderMinutes);
 const PREFERENCES_FALLBACK_KEY = "t3code.preferences.fallback";
 
 export const PullRequestListControls = Schema.Struct({
@@ -51,6 +50,7 @@ export type PullRequestListPreferences = typeof PullRequestListPreferences.Type;
 
 const isThreadListFilters = Schema.is(ThreadListFilters);
 const isPullRequestListPreferences = Schema.is(PullRequestListPreferences);
+const isAttentionReminderMinutes = Schema.is(AttentionReminderMinutes);
 
 export interface Preferences {
   readonly pullRequestHideTestFiles?: boolean;

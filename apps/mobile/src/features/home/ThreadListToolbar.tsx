@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MenuAction } from "@react-native-menu/menu";
-import { useNavigation } from "@react-navigation/native";
 
 import { AndroidHeaderIconButton } from "../../components/ui/AndroidScreenHeader";
 import { CompactBrandTitle } from "../../components/CompactBrandTitle";
@@ -50,7 +49,6 @@ export function ThreadListToolbar(props: {
   const { fabSize } = useAndroidControlSizing();
   const { height: toolbarHeight, ...headerPadding } = useToolbarLayout();
   const { state } = useWorkspaceState();
-  const navigation = useNavigation();
   const foldersSupported = useFoldersSupported();
   const { onRequestVisibility, onSearchQueryChange } = props;
   const showPullRequests = useWorkspaceListNavigation("pullRequests");

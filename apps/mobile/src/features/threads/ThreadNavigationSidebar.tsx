@@ -11,6 +11,7 @@ import {
   type EnvironmentThreadSearchMatch,
 } from "@t3tools/client-runtime/state/thread-search";
 import { LegendList } from "@legendapp/list/react-native";
+import { useNavigation } from "@react-navigation/native";
 import type { MenuAction } from "@react-native-menu/menu";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useRef, useState } from "react";
@@ -29,6 +30,7 @@ import { NATIVE_LIQUID_GLASS_SUPPORTED } from "../../native/native-glass";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { scopedProjectKey, scopedThreadKey } from "../../lib/scopedEntities";
 import { useProjects, useNavigationThreadShells } from "../../state/entities";
+import { useFoldersSupported } from "../../state/folders";
 import { useThreadSearch } from "../../state/queries";
 import { useThreadListV2ShelfPreferences } from "./use-thread-list-v2-shelf-preferences";
 import { usePendingThreadOrder } from "../../state/thread-order";
@@ -133,6 +135,8 @@ function ThreadNavigationSidebarPane(
   const { fabClearance } = useAndroidControlSizing();
   const projects = useProjects();
   const threads = useNavigationThreadShells();
+  const navigation = useNavigation();
+  const foldersSupported = useFoldersSupported();
   const { environments: workspaceEnvironments, state: catalogState } = useWorkspaceState();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const searchInputRef = useRef<TextInputInstance>(null);
@@ -695,6 +699,7 @@ function ThreadNavigationSidebarPane(
     filterIcon,
     filterMenu,
     onOpenSettings: props.onOpenSettings,
+    ...(foldersSupported ? { onOpenFolders: () => navigation.navigate("Folders") } : {}),
   });
   const listEmpty = (
     <Text

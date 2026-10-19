@@ -2,8 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { createFolderEnvironmentAtoms } from "@t3tools/client-runtime/state/folders";
 import type { EnvironmentId, Folder } from "@t3tools/contracts";
 import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useMemo } from "react";
+import { AsyncResult, Atom } from "effect/reactivity";
 
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "./atom-registry";
@@ -56,12 +55,9 @@ export function useFoldersSupported(): boolean {
 }
 
 export function useFolder(environmentId: EnvironmentId, slug: string): Folder | null {
-  const all = useEnvironmentFolders();
-  return useMemo(
-    () =>
-      all
-        .find((entry) => entry.environmentId === environmentId)
-        ?.folders.find((folder) => folder.slug === slug) ?? null,
-    [all, environmentId, slug],
+  return (
+    useEnvironmentFolders()
+      .find((entry) => entry.environmentId === environmentId)
+      ?.folders.find((folder) => folder.slug === slug) ?? null
   );
 }

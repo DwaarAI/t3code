@@ -35,8 +35,22 @@ export function createSidebarHeaderItems(input: {
   readonly filterIcon: string;
   readonly filterMenu: HomeListFilterMenu;
   readonly onOpenSettings: () => void;
+  /** Omitted when no connected environment supports folders. */
+  readonly onOpenFolders?: () => void;
 }): NativeStackHeaderItem[] {
   return [
+    ...(input.onOpenFolders
+      ? [
+          withNativeGlassHeaderItem({
+            type: "button",
+            axisBehavior: "horizontalOnly",
+            label: "Folders",
+            accessibilityLabel: "Open folders",
+            icon: sfSymbolIcon("folder"),
+            onPress: input.onOpenFolders,
+          }),
+        ]
+      : []),
     withNativeGlassHeaderItem({
       type: "menu",
       axisBehavior: "horizontalOnly",

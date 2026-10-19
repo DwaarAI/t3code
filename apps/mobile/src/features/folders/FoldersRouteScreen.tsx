@@ -1,12 +1,12 @@
 import { LegendList } from "@legendapp/list/react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
 
-import { SymbolView } from "../../components/AppSymbol";
-import { AppText as Text } from "../../components/AppText";
-import { EmptyState } from "../../components/EmptyState";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { AppBar } from "../../components/ui/AppBar";
+import { SymbolView } from "../../components/ui/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { EmptyState } from "../../components/ui/EmptyState";
 import { relativeTime } from "../../lib/time";
 import { useThreadShells } from "../../state/entities";
 import { refreshFolders, useEnvironmentFolders } from "../../state/folders";
@@ -22,38 +22,32 @@ export function FoldersRouteScreen() {
   const { savedConnectionsById } = useSavedRemoteConnections();
   const [searchQuery, setSearchQuery] = useState("");
 
-  const entries = useMemo(
-    () => buildFolderList({ environments, threads, searchQuery }),
-    [environments, searchQuery, threads],
-  );
+  const entries = buildFolderList({ environments, threads, searchQuery });
   const showEnvironment = Object.keys(savedConnectionsById).length > 1;
 
   // Folders are read with a query, not streamed; pick up changes made on other clients.
-  useFocusEffect(useCallback(() => refreshFolders(), []));
+  useFocusEffect(refreshFolders);
 
-  const renderItem = useCallback(
-    ({ item }: { readonly item: FolderListEntry }) => (
-      <FolderRow
-        entry={item}
-        environmentLabel={
-          showEnvironment
-            ? (savedConnectionsById[item.environmentId]?.environmentLabel ?? null)
-            : null
-        }
-        onPress={() =>
-          navigation.navigate("Folder", {
-            environmentId: String(item.environmentId),
-            slug: item.folder.slug,
-          })
-        }
-      />
-    ),
-    [navigation, savedConnectionsById, showEnvironment],
+  const renderItem = ({ item }: { readonly item: FolderListEntry }) => (
+    <FolderRow
+      entry={item}
+      environmentLabel={
+        showEnvironment
+          ? (savedConnectionsById[item.environmentId]?.environmentLabel ?? null)
+          : null
+      }
+      onPress={() =>
+        navigation.navigate("Folder", {
+          environmentId: String(item.environmentId),
+          slug: item.folder.slug,
+        })
+      }
+    />
   );
 
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
-      <ScreenHeader
+      <AppBar
         title="Folders"
         sidebar={false}
         onBack={() => navigation.goBack()}
