@@ -1,75 +1,100 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-vi.mock("./assets/notification-completion.mp3", () => ({ default: "completion.mp3" }));
-vi.mock("./assets/notification-input.mp3", () => ({ default: "input.mp3" }));
+const SOUND_SECONDS = 0.6;
 
-import { setNotificationBadge, showTestNotification } from "./threadNotifications";
+const audio = { currentTime: 0, started: 0 };
 
-class TestNotification extends EventTarget {
-  static sent: TestNotification[] = [];
-  close = vi.fn();
-  constructor(
-    readonly title: string,
-    readonly options: NotificationOptions,
-  ) {
-    super();
-    TestNotification.sent.push(this);
+class FakeAudioContext {
+  state = "running";
+  destination = {};
+  get currentTime() {
+    return audio.currentTime;
+  }
+  resume() {
+    return Promise.resolve();
+  }
+  decodeAudioData() {
+    return Promise.resolve({ duration: SOUND_SECONDS });
+  }
+  createBufferSource() {
+    return {
+      buffer: null,
+      connect() {},
+      start() {
+        audio.started += 1;
+      },
+    };
   }
 }
 
-let focused = false;
-const setBadge = vi.fn((_badge: { count: number; image: string | null }) => Promise.resolve());
-const badgeCounts = () => setBadge.mock.calls.map(([badge]) => badge.count);
+async function loadUnlocked() {
+  const notifications = await import("./threadNotifications");
+  notifications.unlockNotificationAudio();
+  return notifications;
+}
 
 beforeEach(() => {
-  focused = false;
-  TestNotification.sent = [];
-  setBadge.mockClear();
-  vi.stubGlobal("Notification", TestNotification);
+  vi.resetModules();
+  audio.currentTime = 0;
+  audio.started = 0;
+  vi.stubGlobal("AudioContext", FakeAudioContext);
   vi.stubGlobal(
-    "window",
-    Object.assign(new EventTarget(), {
-      focus: vi.fn(),
-      desktopBridge: { getClientPlatform: () => "darwin", setNotificationBadge: setBadge },
-    }),
+    "fetch",
+    vi.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(0) })),
   );
-  vi.stubGlobal("document", { hasFocus: () => focused });
-  setNotificationBadge(0);
-  setBadge.mockClear();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("showTestNotification", () => {
-  it("adds one to the thread badge while in the background, then clears on focus", () => {
-    setNotificationBadge(2);
-    expect(showTestNotification(false)).toBe(true);
-    expect(TestNotification.sent.map((notification) => notification.title)).toEqual([
-      "T3 Code test notification",
-    ]);
+describe("playNotificationSound", () => {
+  it("plays one sound for threads that complete together", async () => {
+    const { playNotificationSound } = await loadUnlocked();
 
-    focused = true;
-    window.dispatchEvent(new Event("focus"));
+    // All four are waiting on the first decode when the sound becomes playable.
+    await Promise.all(
+      Array.from({ length: 4 }, () => playNotificationSound("completion", () => true)),
+    );
 
-    expect(badgeCounts()).toEqual([2, 3, 2]);
-    expect(TestNotification.sent[0]?.close).toHaveBeenCalled();
+    expect(audio.started).toBe(1);
   });
 
-  it("keeps real thread notifications counted after the test clears", () => {
-    showTestNotification(false);
-    setNotificationBadge(1);
-    TestNotification.sent[0]?.dispatchEvent(new Event("click"));
+  it("skips a completion that lands while the sound is still playing", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    await playNotificationSound("completion", () => true);
 
-    expect(badgeCounts()).toEqual([1, 2, 1]);
+    audio.currentTime = SOUND_SECONDS / 2;
+    await playNotificationSound("completion", () => true);
+
+    expect(audio.started).toBe(1);
   });
 
-  it("leaves the badge alone when the app is already focused", () => {
-    focused = true;
-    showTestNotification(false);
+  it("plays again once the previous sound has ended", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    await playNotificationSound("completion", () => true);
 
-    expect(setBadge).not.toHaveBeenCalled();
-    expect(TestNotification.sent).toHaveLength(1);
+    audio.currentTime = SOUND_SECONDS;
+    await playNotificationSound("completion", () => true);
+
+    expect(audio.started).toBe(2);
+  });
+
+  it("still plays an input alert over a completion sound", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    await playNotificationSound("completion", () => true);
+
+    await playNotificationSound("input", () => true);
+
+    expect(audio.started).toBe(2);
+  });
+
+  it("leaves the slot free when a sound is turned off before it plays", async () => {
+    const { playNotificationSound } = await loadUnlocked();
+    await playNotificationSound("completion", () => false);
+
+    await playNotificationSound("completion", () => true);
+
+    expect(audio.started).toBe(1);
   });
 });

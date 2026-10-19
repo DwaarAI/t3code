@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { Pressable, View } from "react-native";
 
 import { SymbolView } from "../../components/AppSymbol";

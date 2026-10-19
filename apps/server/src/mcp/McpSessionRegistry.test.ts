@@ -2,8 +2,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
 import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import { HttpServer } from "effect/unstable/http";
-import * as NetAddress from "effect/unstable/net/NetAddress";
+import { HttpServer } from "effect/http";
+import * as NetAddress from "effect/net/NetAddress";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
@@ -47,7 +47,10 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
     expect(token.length).toBeGreaterThan(20);
 
     const resolved = yield* registry.resolve(token);
-    expect(resolved?.threadId).toBe(threadId);
+    expect(resolved?.thread.threadId).toBe(threadId);
+    expect(resolved?.capabilities).toEqual(
+      new Set(["preview", "orchestration", "worktree", "pull-requests"]),
+    );
 
     yield* registry.revokeThread(threadId);
     expect(yield* registry.resolve(token)).toBeUndefined();
@@ -81,9 +84,26 @@ it.effect(
           .resolve(issued.config.authorizationHeader.replace(/^Bearer\s+/, ""))
           .pipe(Effect.map((scope) => [...(scope?.capabilities ?? [])].sort()));
 
-      expect(yield* capabilitiesOf(withPreview)).toEqual(["jira", "preview", "pull-requests"]);
-      expect(yield* capabilitiesOf(withoutPreview)).toEqual(["jira", "pull-requests"]);
-      expect(yield* capabilitiesOf(withDevice)).toEqual(["device", "jira", "pull-requests"]);
+      expect(yield* capabilitiesOf(withPreview)).toEqual([
+        "jira",
+        "orchestration",
+        "preview",
+        "pull-requests",
+        "worktree",
+      ]);
+      expect(yield* capabilitiesOf(withoutPreview)).toEqual([
+        "jira",
+        "orchestration",
+        "pull-requests",
+        "worktree",
+      ]);
+      expect(yield* capabilitiesOf(withDevice)).toEqual([
+        "device",
+        "jira",
+        "orchestration",
+        "pull-requests",
+        "worktree",
+      ]);
     }),
 );
 
@@ -136,14 +156,12 @@ it.effect("keeps a credential alive across turns that never touch an MCP tool", 
     });
     const token = issued.config.authorizationHeader.replace(/^Bearer\s+/, "");
 
-    // Well past the liveness window in total, but each turn reports in before
-    // it lapses — this is the long-session case that used to lose the toolkit.
     for (let turn = 0; turn < 10; turn += 1) {
       timestamp += 99;
       yield* registry.touch(threadId);
     }
 
-    expect((yield* registry.resolve(token))?.threadId).toBe(threadId);
+    expect((yield* registry.resolve(token))?.thread.threadId).toBe(threadId);
   }),
 );
 
