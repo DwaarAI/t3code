@@ -46,6 +46,7 @@ export function HomeHeader(props: HomeHeaderProps) {
   const iconColor = useUniwindTheme()["--color-icon"];
   const foldersSupported = useFoldersSupported();
   const openFolders = () => navigation.navigate("Folders");
+  const openRecentActivity = () => navigation.navigate("RecentActivity");
   const hasCustomListOptions =
     props.selectedEnvironmentId !== null || props.selectedProjectKey !== null;
   const focusSearch = useCallback(() => {
@@ -79,6 +80,7 @@ export function HomeHeader(props: HomeHeaderProps) {
                       : "line.3.horizontal.decrease.circle",
                     filterMenu,
                     onOpenSettings: props.onOpenSettings,
+                    onOpenRecentActivity: openRecentActivity,
                     ...(foldersSupported ? { onOpenFolders: openFolders } : {}),
                   }),
                   ...(showsCompactCompose
@@ -96,6 +98,14 @@ export function HomeHeader(props: HomeHeaderProps) {
                     : []),
                 ]
               : [
+                  withNativeGlassHeaderItem({
+                    accessibilityLabel: "Open recent activity",
+                    icon: { name: "clock.arrow.circlepath", type: "sfSymbol" } as const,
+                    identifier: "home-recent-activity",
+                    label: "",
+                    onPress: openRecentActivity,
+                    type: "button",
+                  }),
                   ...(foldersSupported
                     ? [
                         withNativeGlassHeaderItem({

@@ -14,7 +14,7 @@ import {
   type PullRequestMergeMethod,
   type SidebarProjectGroupingMode,
 } from "@t3tools/contracts";
-import { AttentionReminderMinutes } from "@t3tools/contracts/settings";
+import { AttentionReminderMinutes, RecentActivitySort } from "@t3tools/contracts/settings";
 import type { ComposerEnterBehavior } from "../lib/composerEnterBehavior";
 import type { FollowUpBehavior } from "../lib/followUpBehavior";
 import { isMicrophoneKind, type MicrophoneEntry } from "../lib/microphonePriority";
@@ -51,6 +51,7 @@ export type PullRequestListPreferences = typeof PullRequestListPreferences.Type;
 const isThreadListFilters = Schema.is(ThreadListFilters);
 const isPullRequestListPreferences = Schema.is(PullRequestListPreferences);
 const isAttentionReminderMinutes = Schema.is(AttentionReminderMinutes);
+const isRecentActivitySort = Schema.is(RecentActivitySort);
 
 export interface Preferences {
   readonly pullRequestHideTestFiles?: boolean;
@@ -85,6 +86,7 @@ export interface Preferences {
   readonly threadListSnoozedShelfExpanded?: boolean;
   /** Minutes before an unanswered approval or question notifies this device; 0 is off. */
   readonly attentionReminderMinutes?: number;
+  readonly recentActivitySort?: RecentActivitySort;
   readonly threadListWorkingShelfExpanded?: boolean;
   readonly threadListFilters?: ThreadListFilters;
   readonly pullRequestListFilters?: PullRequestListPreferences;
@@ -155,6 +157,7 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     threadListSettledShelfExpanded?: boolean;
     threadListSnoozedShelfExpanded?: boolean;
     attentionReminderMinutes?: number;
+    recentActivitySort?: RecentActivitySort;
     threadListWorkingShelfExpanded?: boolean;
     threadListFilters?: ThreadListFilters;
     pullRequestListFilters?: PullRequestListPreferences;
@@ -276,6 +279,9 @@ function sanitizePreferences(parsed: Preferences): Preferences {
   }
   if (isAttentionReminderMinutes(parsed.attentionReminderMinutes)) {
     preferences.attentionReminderMinutes = parsed.attentionReminderMinutes;
+  }
+  if (isRecentActivitySort(parsed.recentActivitySort)) {
+    preferences.recentActivitySort = parsed.recentActivitySort;
   }
   if (typeof parsed.threadListWorkingShelfExpanded === "boolean") {
     preferences.threadListWorkingShelfExpanded = parsed.threadListWorkingShelfExpanded;

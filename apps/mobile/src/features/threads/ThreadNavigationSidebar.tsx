@@ -699,6 +699,7 @@ function ThreadNavigationSidebarPane(
     filterIcon,
     filterMenu,
     onOpenSettings: props.onOpenSettings,
+    onOpenRecentActivity: () => navigation.navigate("RecentActivity"),
     ...(foldersSupported ? { onOpenFolders: () => navigation.navigate("Folders") } : {}),
   });
   const listEmpty = (

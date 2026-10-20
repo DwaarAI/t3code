@@ -250,6 +250,13 @@ export function CommandPalette(props: {
           }),
       },
       {
+        key: "recentActivity",
+        kind: "action",
+        title: "Recent activity",
+        searchTerms: ["recent", "history", "last opened", "viewed"],
+        run: () => navigation.navigate("RecentActivity"),
+      },
+      {
         key: "archive",
         kind: "action",
         title: "Archived threads",

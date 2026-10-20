@@ -50,3 +50,25 @@ describe("mobile preferences attention reminders", () => {
     }),
   );
 });
+
+describe("mobile preferences recent activity sort", () => {
+  it.effect("keeps a known sort", () =>
+    Effect.gen(function* () {
+      for (const recentActivitySort of ["updated", "prompt", "viewed"] as const) {
+        expect((yield* loadStored({ recentActivitySort })).recentActivitySort).toBe(
+          recentActivitySort,
+        );
+      }
+    }),
+  );
+
+  it.effect("drops an unknown sort without losing other preferences", () =>
+    Effect.gen(function* () {
+      for (const recentActivitySort of ["created", "", 1, null]) {
+        const preferences = yield* loadStored({ recentActivitySort, baseFontSize: 17 });
+        expect(preferences).not.toHaveProperty("recentActivitySort");
+        expect(preferences.baseFontSize).toBe(17);
+      }
+    }),
+  );
+});

@@ -57,6 +57,7 @@ import {
 } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
+  HistoryIcon,
   ArrowLeftIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
@@ -151,6 +152,11 @@ import {
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
+import {
+  isRecentActivityOpen,
+  openRecentActivity,
+  toggleRecentActivity,
+} from "./sidebar/RecentActivity";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
@@ -575,6 +581,14 @@ export function CommandPalette({ children }: { children: ReactNode }) {
         void navigate({ to: "/usage" });
         return;
       }
+      if (command === "recentActivity.toggle") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) return;
+        setOpen(false);
+        toggleRecentActivity();
+        return;
+      }
       const mode = overlayModeForCommand(command);
       if (mode === null) {
         return;
@@ -670,6 +684,8 @@ function CommandPaletteDialog(props: {
       data-palette-mode={props.mode}
       data-testid="command-palette"
       finalFocus={() => {
+        // The Recent activity action opens a popover as the palette closes.
+        if (isRecentActivityOpen()) return false;
         const composer = composerHandleRef?.current;
         if (!composer) return true;
         composer.focusAtEnd();
@@ -2042,6 +2058,18 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:recent-activity",
+    searchTerms: ["recent", "recent activity", "history", "recently viewed", "last opened"],
+    title: "Recent activity",
+    icon: <HistoryIcon className={ITEM_ICON_CLASS} />,
+    shortcutCommand: "recentActivity.toggle",
+    run: async () => {
+      openRecentActivity();
+    },
+  });
 
   actionItems.push({
     kind: "action",

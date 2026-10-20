@@ -41,6 +41,7 @@ import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server"
  */
 const HTML_RENDER_SHORTCUT_COMMANDS: ReadonlySet<KeybindingCommand> = new Set([
   "commandPalette.toggle",
+  "recentActivity.toggle",
   "filePicker.toggle",
   "projectSearch.toggle",
   "chat.find",

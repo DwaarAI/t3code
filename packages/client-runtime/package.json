@@ -43,6 +43,10 @@
       "types": "./src/attentionReminders.ts",
       "default": "./src/attentionReminders.ts"
     },
+    "./recent-activity": {
+      "types": "./src/recentActivity.ts",
+      "default": "./src/recentActivity.ts"
+    },
     "./user-message": {
       "types": "./src/userMessage.ts",
       "default": "./src/userMessage.ts"

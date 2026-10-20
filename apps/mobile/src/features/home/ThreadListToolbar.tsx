@@ -141,6 +141,11 @@ export function ThreadListToolbar(props: {
                 icon="magnifyingglass"
                 onPress={openSearch}
               />
+              <AndroidHeaderIconButton
+                accessibilityLabel="Open recent activity"
+                icon="clock.arrow.circlepath"
+                onPress={() => navigation.navigate("RecentActivity")}
+              />
               {foldersSupported ? (
                 <AndroidHeaderIconButton
                   accessibilityLabel="Open folders"
