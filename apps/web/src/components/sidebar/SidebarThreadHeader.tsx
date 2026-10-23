@@ -16,6 +16,7 @@ export interface SidebarThreadHeaderProps {
   searchFieldRef?: RefObject<HTMLDivElement | null>;
   hasProjects: boolean;
   projectScope: ReactNode;
+  recentActivity: ReactNode;
   onNewProject: () => void;
   onNewThread: (event: ReactMouseEvent) => void;
   newThreadDisabled: boolean;
@@ -36,6 +37,7 @@ export function SidebarThreadHeader({
   searchFieldRef,
   hasProjects,
   projectScope,
+  recentActivity,
   onNewProject,
   onNewThread,
   newThreadDisabled,
@@ -112,6 +114,7 @@ export function SidebarThreadHeader({
             </SidebarHeaderIconButton>
           </>
         ) : null}
+        {recentActivity}
         <SidebarHeaderIconButton
           label="New thread"
           tooltip={

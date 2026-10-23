@@ -296,6 +296,9 @@ export const AttentionReminderMinutes = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: 24 * 60 }),
 );
 export const DEFAULT_ATTENTION_REMINDER_MINUTES = 5;
+/** Which time orders the Recent activity stack; the stack itself is always the last threads viewed. */
+export const RecentActivitySort = Schema.Literals(["updated", "prompt", "viewed"]);
+export type RecentActivitySort = typeof RecentActivitySort.Type;
 export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
 export type ChatWidth = typeof ChatWidth.Type;
 
@@ -326,6 +329,9 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   diffColorScheme: DiffColorScheme.pipe(
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
+  ),
+  recentActivitySort: RecentActivitySort.pipe(
+    Schema.withDecodingDefault(Effect.succeed("updated" as const)),
   ),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
@@ -1698,6 +1704,7 @@ export const ClientSettingsPatch = Schema.Struct({
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   attentionReminderMinutes: Schema.optionalKey(AttentionReminderMinutes),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
+  recentActivitySort: Schema.optionalKey(RecentActivitySort),
   chatWidth: Schema.optionalKey(ChatWidth),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),

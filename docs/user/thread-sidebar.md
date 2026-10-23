@@ -202,6 +202,18 @@ On web and desktop, a thread's hover card shows the provider's own session ID on
 command such as `cd <worktree> && claude --resume <id>` for continuing a Claude Code or Codex
 session in a terminal on the machine running T3 Code.
 
+### Recent activity
+
+**Recent activity** lists the last 10 threads you opened, across connected
+environments. On web and desktop, open it with the clock button in the sidebar
+header, `Cmd/Ctrl+E`, or **Recent activity** in the command palette. On mobile,
+use the clock button in the home header. Pick a thread to open it.
+
+Each row shows how long ago the thread was updated, when you last prompted it,
+and when you last viewed it. The list is sorted by **Updated**; switch to
+**Prompt** or **Viewed** at the top of the list, and your choice is remembered.
+Archived and deleted threads drop out of the list.
+
 ## Inspect agent work
 
 **Limited** means the provider stopped on a usage or rate limit. The conversation

@@ -187,6 +187,11 @@ export function WorkspaceToolbar(props: {
             onPress={() => navigation.navigate("Folders")}
           />
         ) : null}
+        <Toolbar.Button
+          accessibilityLabel="Open recent activity"
+          icon="clock.arrow.circlepath"
+          onPress={() => navigation.navigate("RecentActivity")}
+        />
         {NATIVE_LIQUID_GLASS_SUPPORTED ? null : (
           <Toolbar.Button
             accessibilityLabel={

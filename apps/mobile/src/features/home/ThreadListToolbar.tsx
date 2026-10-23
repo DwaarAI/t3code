@@ -117,13 +117,20 @@ export function ThreadListToolbar(props: {
         titleAccessibilityLabel="T3 Code, Threads"
         onOpenEnvironments={props.onOpenEnvironments}
         actions={
-          foldersSupported ? (
+          <>
             <AndroidHeaderIconButton
-              accessibilityLabel="Open folders"
-              icon="folder"
-              onPress={() => navigation.navigate("Folders")}
+              accessibilityLabel="Open recent activity"
+              icon="clock.arrow.circlepath"
+              onPress={() => navigation.navigate("RecentActivity")}
             />
-          ) : null
+            {foldersSupported ? (
+              <AndroidHeaderIconButton
+                accessibilityLabel="Open folders"
+                icon="folder"
+                onPress={() => navigation.navigate("Folders")}
+              />
+            ) : null}
+          </>
         }
         filter={filterButton}
       />
