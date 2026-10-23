@@ -28,6 +28,7 @@ import {
   hasNotificationSound,
   playNotificationSound,
   setNotificationBadge,
+  threadNotificationTag,
   unlockNotificationAudio,
 } from "../threadNotifications";
 import { resolveSidebarThreadStatus } from "./Sidebar.logic";
@@ -168,13 +169,14 @@ function presentThreadNotification(
   try {
     const notification = new Notification(alert.title, {
       body: alert.threadTitle,
-      tag: `${environmentId}:${alert.threadId}`,
+      tag: threadNotificationTag(environmentId, alert.threadId),
       silent: true,
     });
     context.onNotification(environmentId, notification);
     notification.addEventListener("click", () => {
       notification.close();
       window.focus();
+      void window.desktopBridge?.revealWindow?.().catch(() => undefined);
       openThread();
     });
   } catch {
@@ -307,7 +309,9 @@ function EnvironmentNotifications({
       const kind =
         attention && attention !== prior.attention
           ? "input"
-          : completion !== null && (prior.completion === null || completion > prior.completion)
+          : !rawThread.latestRunStopRequested &&
+              completion !== null &&
+              (prior.completion === null || completion > prior.completion)
             ? "completion"
             : null;
       if (!kind) continue;

@@ -13,6 +13,7 @@ import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { relativeTime } from "../../lib/time";
+import { uuidv4 } from "../../lib/uuid";
 import { useThreadShells, waitForProject } from "../../state/entities";
 import { folderEnvironment, refreshFolders, useFolder } from "../../state/folders";
 import { useAtomCommand } from "../../state/use-atom-command";
@@ -39,9 +40,9 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
   // A repository thread reuses the member's worktree; the draft route skips
   // any checkout when it is handed an existing worktree path.
   const startMemberThread = (member: FolderMember) => {
-    navigation.navigate("NewTaskSheet", {
-      screen: "NewTaskDraft",
-      params: {
+    navigation.navigate("Thread", {
+      draft: {
+        requestId: uuidv4(),
         environmentId: String(environmentId),
         projectId: String(member.projectId),
         branch: member.branch,
@@ -76,9 +77,9 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
       Alert.alert("Could not open a folder session", "The folder's project did not load.");
       return;
     }
-    navigation.navigate("NewTaskSheet", {
-      screen: "NewTaskDraft",
-      params: {
+    navigation.navigate("Thread", {
+      draft: {
+        requestId: uuidv4(),
         environmentId: String(environmentId),
         projectId: String(rootProjectId),
         title: target.name,
