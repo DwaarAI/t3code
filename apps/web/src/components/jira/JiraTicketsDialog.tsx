@@ -16,7 +16,7 @@ import type {
   JiraStatusCategory,
 } from "@t3tools/contracts";
 import { ChevronDownIcon, ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { create } from "zustand";
 
 import { cn } from "~/lib/utils";
@@ -67,7 +67,7 @@ function StatusPill({ status, category }: { status: string; category: JiraStatus
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[0.7rem] font-medium uppercase tracking-wide",
+        "inline-flex h-5 shrink-0 items-center rounded px-1.5 text-2xs font-medium uppercase tracking-wide",
         STATUS_TONE_CLASSES[jiraStatusTone(category)],
       )}
     >
@@ -112,10 +112,7 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
   const attached = useEnvironmentQuery(
     query === null ? null : jiraEnvironment.search({ environmentId, input: { query } }),
   );
-  const tickets = useMemo(
-    () => orderFolderTickets(keys, attached.data?.issues ?? []),
-    [attached.data, keys],
-  );
+  const tickets = orderFolderTickets(keys, attached.data?.issues ?? []);
   const [selected, setSelected] = useState<string | null>(keys[0] ?? null);
   const [search, setSearch] = useState("");
   const [submitted, setSubmitted] = useState("");

@@ -1,9 +1,10 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { FolderThreadMatch } from "@t3tools/client-runtime/state/folders";
+import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
 import { FolderIcon, PlusIcon } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo } from "react";
 
 import { useStartFolderSession, useStartFolderThread } from "../../hooks/useStartFolderThread";
 import { useFolderHandoff } from "../../hooks/useFolderHandoff";
@@ -45,20 +46,16 @@ function FolderThreadTabStrip(
   const handOff = useFolderHandoff();
   const startReview = useStartReview();
   const allThreads = useThreadShells();
-  const threads = useMemo(
-    () =>
-      allThreads
-        .filter(
-          (thread) =>
-            thread.environmentId === environmentId &&
-            thread.archivedAt === null &&
-            (member
-              ? thread.worktreePath === member.worktreePath
-              : thread.worktreePath === null && thread.projectId === folder.rootProjectId),
-        )
-        .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt)),
-    [allThreads, environmentId, folder.rootProjectId, member],
-  );
+  const threads = allThreads
+    .filter(
+      (thread) =>
+        thread.environmentId === environmentId &&
+        thread.archivedAt === null &&
+        (member
+          ? thread.worktreePath === member.worktreePath
+          : thread.worktreePath === null && thread.projectId === folder.rootProjectId),
+    )
+    .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
   const scopeLabel = member?.repoName ?? "All repositories";
   const isDraft = !threads.some((thread) => thread.id === threadId);
   const current = threads.find((thread) => thread.id === threadId);
@@ -111,7 +108,7 @@ function FolderThreadTabStrip(
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
               )}
             >
-              {thread.session?.status === "running" ? (
+              {threadRuntimeIsActive(thread.runtime) ? (
                 <span aria-label="Running" className="size-1.5 shrink-0 rounded-full bg-primary" />
               ) : null}
               <span className="truncate">{thread.title}</span>

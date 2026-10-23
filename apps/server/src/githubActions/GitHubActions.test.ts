@@ -6,11 +6,11 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as ServerConfig from "../config.ts";
-import * as GitHubCli from "../sourceControl/GitHubCli.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
+import * as GhCli from "./GhCli.ts";
 import * as GitHubActions from "./GitHubActions.ts";
 
 const git = (cwd: string, ...args: string[]) =>
@@ -67,13 +67,13 @@ const withActions = <A, E>(
       GitHubActions.layer.pipe(
         Layer.provide(GitVcsDriver.layer),
         Layer.provide(
-          Layer.mock(GitHubCli.GitHubCli)({
-            execute: (input) =>
+          Layer.mock(GhCli.GhCli)({
+            run: (input) =>
               Effect.sync(() => {
                 calls.push({ args: input.args, stdin: input.stdin });
-                const stdout =
-                  input.args[0] === "run" && input.args[1] === "list" ? encodeRuns([RUN_ROW]) : "";
-                return { stdout, stderr: "", code: 0 } as never;
+                return input.args[0] === "run" && input.args[1] === "list"
+                  ? encodeRuns([RUN_ROW])
+                  : "";
               }),
           }),
         ),

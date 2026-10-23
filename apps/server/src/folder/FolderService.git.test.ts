@@ -1,8 +1,8 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
-  type OrchestrationProjectShell,
-  type OrchestrationShellSnapshot,
+  type OrchestrationV2ThreadShellSnapshot,
+  type Project,
   ProjectId,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -10,13 +10,13 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 import * as ServerConfig from "../config.ts";
 import * as GitManager from "../git/GitManager.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as FolderGitHub from "./FolderGitHub.ts";
@@ -51,31 +51,34 @@ const makeLayer = (roots: Record<string, string>) => {
         resolve: () => Effect.succeed({ kind: "git" } as VcsDriverRegistry.VcsDriverHandle),
       }),
     ),
+    // GitManager only adds settings lookups on top of the driver's worktree creation.
+    Layer.provide(
+      Layer.unwrap(
+        Effect.map(GitVcsDriver.GitVcsDriver, (driver) =>
+          Layer.mock(GitManager.GitManager)({ createWorktree: driver.createWorktree }),
+        ),
+      ),
+    ),
     Layer.provide(GitVcsDriver.layer),
-    Layer.provide(Layer.mock(GitManager.GitManager)({})),
   );
   return FolderService.layer.pipe(
     Layer.provide(gitWorkflow),
     Layer.provide(GitVcsDriver.layer),
     Layer.provide(Layer.mock(FolderGitHub.FolderGitHub)({})),
     Layer.provide(
-      Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
-        getProjectShellById: (projectId) =>
+      Layer.mock(ProjectService.ProjectService)({
+        getById: (projectId) =>
           Effect.succeed(
             roots[projectId]
-              ? Option.some({
-                  id: projectId,
-                  workspaceRoot: roots[projectId],
-                } as OrchestrationProjectShell)
+              ? Option.some({ id: projectId, workspaceRoot: roots[projectId] } as Project)
               : Option.none(),
           ),
-        getShellSnapshot: () =>
-          Effect.succeed({ threads: [] } as unknown as OrchestrationShellSnapshot),
       }),
     ),
     Layer.provide(
-      Layer.mock(OrchestrationEngine.OrchestrationEngineService)({
-        dispatch: () => Effect.succeed({ sequence: 0 }),
+      Layer.mock(ThreadManagementService.ThreadManagementService)({
+        getShellSnapshot: () =>
+          Effect.succeed({ threads: [] } as unknown as OrchestrationV2ThreadShellSnapshot),
       }),
     ),
     Layer.provide(config),

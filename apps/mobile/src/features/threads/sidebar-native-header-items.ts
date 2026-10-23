@@ -31,19 +31,29 @@ function toNativeHeaderMenuItems(items: HomeListFilterMenu["items"]): NativeHead
   );
 }
 
-/**
- * Right-side UINavigationBar items for the sidebar column: the thread list
- * filter/sort menu plus the settings button, sharing one glass capsule —
- * the Messages-style grouped header buttons.
- */
 export function createSidebarHeaderItems(input: {
   readonly filterIcon: string;
   readonly filterMenu: HomeListFilterMenu;
   readonly onOpenSettings: () => void;
+  /** Omitted when no connected environment supports folders. */
+  readonly onOpenFolders?: () => void;
 }): NativeStackHeaderItem[] {
   return [
+    ...(input.onOpenFolders
+      ? [
+          withNativeGlassHeaderItem({
+            type: "button",
+            axisBehavior: "horizontalOnly",
+            label: "Folders",
+            accessibilityLabel: "Open folders",
+            icon: sfSymbolIcon("folder"),
+            onPress: input.onOpenFolders,
+          }),
+        ]
+      : []),
     withNativeGlassHeaderItem({
       type: "menu",
+      axisBehavior: "horizontalOnly",
       label: "",
       accessibilityLabel: "Filter threads",
       icon: sfSymbolIcon(input.filterIcon),
@@ -54,7 +64,8 @@ export function createSidebarHeaderItems(input: {
     }),
     withNativeGlassHeaderItem({
       type: "button",
-      label: "",
+      axisBehavior: "horizontalOnly",
+      label: "Settings",
       accessibilityLabel: "Open settings",
       icon: sfSymbolIcon("gearshape"),
       onPress: input.onOpenSettings,

@@ -18,7 +18,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
-import * as GitHubCli from "../sourceControl/GitHubCli.ts";
+import * as GhCli from "./GhCli.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import {
   dispatchInputs,
@@ -89,7 +89,7 @@ export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const git = yield* GitVcsDriver.GitVcsDriver;
-  const gh = yield* GitHubCli.GitHubCli;
+  const gh = yield* GhCli.GhCli;
 
   const gitOutput = (cwd: string, args: ReadonlyArray<string>) =>
     git
@@ -128,9 +128,10 @@ export const make = Effect.gen(function* () {
         branch,
       } satisfies BranchTarget;
     }).pipe(
-      Effect.catchTag("GitCommandError", (cause) =>
-        Effect.fail(failure("git_failed", `Could not read the branch in ${cwd}`)(cause)),
-      ),
+      Effect.catchTags({
+        GitCommandError: (cause) =>
+          Effect.fail(failure("git_failed", `Could not read the branch in ${cwd}`)(cause)),
+      }),
     );
 
   /** A target that `gh` can act on: on GitHub, on a branch. */
@@ -147,10 +148,9 @@ export const make = Effect.gen(function* () {
     });
 
   const run = (cwd: string, detail: string, args: ReadonlyArray<string>, stdin?: string) =>
-    gh.execute({ cwd, args, ...(stdin === undefined ? {} : { stdin }) }).pipe(
-      Effect.map((output) => output.stdout),
-      Effect.mapError(failure("github_failed", detail)),
-    );
+    gh
+      .run({ cwd, args, ...(stdin === undefined ? {} : { stdin }) })
+      .pipe(Effect.mapError(failure("github_failed", detail)));
 
   const readWorkflows = (root: string) =>
     Effect.gen(function* () {

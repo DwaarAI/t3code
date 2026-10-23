@@ -1,7 +1,7 @@
 import { PASTED_TEXT_ATTACHMENT_THRESHOLD_BYTES } from "@t3tools/client-runtime/text-paste";
 import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from "@t3tools/contracts";
 import { collectComposerInlineTokens } from "@t3tools/shared/composerInlineTokens";
-import { composerContextEditorTokens } from "../lib/composerContext";
+import { composerContextEditorTokens, composerSkillLabels } from "../lib/composerContext";
 import { requireNativeView } from "expo";
 import {
   useCallback,
@@ -16,17 +16,15 @@ import type { NativeSyntheticEvent, StyleProp, ViewProps, ViewStyle } from "reac
 import { StyleSheet } from "react-native";
 
 import {
-  markdownFileIconSource,
-  markdownIconAssetUri,
-} from "@t3tools/mobile-markdown-text/file-icons";
-import {
   composerChipSizeSuffix,
+  contextChipIcon,
   contextChipPresentation,
-} from "@t3tools/mobile-markdown-text/markdown";
-import { resolveMarkdownFileIcon } from "@t3tools/mobile-markdown-text/links";
+  contextRecordFileName,
+} from "../lib/composerChipPresentation";
+import { contextChipIconUri } from "../lib/contextChipIconSource";
 import { useUniwindTheme } from "../lib/useUniwindTheme";
 import { createNativeComposerTheme } from "../lib/nativeComposerTheme";
-import { useFontFamily } from "../lib/useFontFamily";
+import { FONT_FAMILIES } from "../lib/fontFamilies";
 import { useScaledTextRole } from "../features/settings/appearance/useScaledTextRole";
 import {
   acknowledgeComposerNativeEvent,
@@ -84,6 +82,8 @@ interface NativeComposerEditorProps extends ViewProps {
   readonly editable: boolean;
   readonly readOnly: boolean;
   readonly enterBehavior: string;
+  readonly submitTitle: string;
+  readonly alternateSubmitTitle: string;
   readonly scrollEnabled: boolean;
   readonly autoFocus: boolean;
   readonly autoCorrect: boolean;
@@ -102,7 +102,10 @@ interface NativeComposerEditorProps extends ViewProps {
   readonly onComposerPasteText?: (event: NativePasteTextEvent) => void;
   readonly onComposerFocus?: () => void;
   readonly onComposerBlur?: () => void;
-  readonly onComposerSubmit?: () => void;
+  readonly onComposerSubmit?: (event: NativeSyntheticEvent<{ alternate: boolean }>) => void;
+  readonly onComposerContentSizeChange?: (
+    event: NativeSyntheticEvent<{ readonly width: number; readonly height: number }>,
+  ) => void;
 }
 
 const NativeView = requireNativeView<NativeComposerEditorProps>(NATIVE_MODULE_NAME);
@@ -110,10 +113,6 @@ const NativeView = requireNativeView<NativeComposerEditorProps>(NATIVE_MODULE_NA
 function basename(path: string): string {
   const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return separator >= 0 ? path.slice(separator + 1) : path;
-}
-
-function fileIconUri(path: string): string | null {
-  return markdownIconAssetUri(markdownFileIconSource(resolveMarkdownFileIcon(path))) ?? null;
 }
 
 export function ComposerEditor({
@@ -129,6 +128,7 @@ export function ComposerEditor({
   onFocus,
   onBlur,
   onSubmit,
+  onContentSizeChange,
   contentInsetVertical = 0,
   ...props
 }: ComposerEditorProps) {
@@ -143,7 +143,7 @@ export function ComposerEditor({
   const confirmedTokensRef = useRef(collectComposerInlineTokens(props.value));
   const bodyText = useScaledTextRole("body");
   const theme = useUniwindTheme();
-  const fontFamily = useFontFamily("regular");
+  const fontFamily = FONT_FAMILIES.regular;
 
   useImperativeHandle(
     ref,
@@ -156,27 +156,32 @@ export function ComposerEditor({
     [],
   );
 
-  const skillLabels = useMemo(
-    () => new Map(skills.map((skill) => [skill.name, skill.displayName?.trim() || skill.name])),
-    [skills],
-  );
+  const skillLabels = useMemo(() => composerSkillLabels(skills), [skills]);
   const tokensJson = useMemo(() => {
     const tokens = collectComposerInlineTokens(props.value, {
       preserveTrailingFrom: confirmedTokensRef.current,
     });
     confirmedTokensRef.current = tokens;
     return JSON.stringify(
-      composerContextEditorTokens(props.value, tokens).map((token) => {
+      composerContextEditorTokens(props.value, tokens, skillLabels).map((token) => {
         const record =
           token.type === "context"
             ? props.context?.records.find((record) => record.contextId === token.contextId)
             : undefined;
+        const presentation = contextChipPresentation(
+          token.type === "context" ? token.kind : token.type,
+          record,
+        );
+        const icon = contextChipIcon(
+          presentation,
+          token.type === "mention" ? token.value : contextRecordFileName(record),
+        );
         return {
           type: token.type,
           source: token.source,
           start: token.start,
           end: token.end,
-          ...contextChipPresentation(token.type === "context" ? token.kind : token.type, record),
+          accent: presentation.accent,
           label:
             token.type === "skill"
               ? (skillLabels.get(token.value) ?? token.value)
@@ -184,15 +189,8 @@ export function ComposerEditor({
                 ? `${token.label}${props.context?.records.some((record) => record.contextId === token.contextId) ? "" : " · unavailable"}`
                 : basename(token.value),
           detail: token.type === "context" ? composerChipSizeSuffix(record) : "",
-          // Only a mention wears per-filetype artwork. An attachment chip keeps the tinted
-          // monochrome glyph web draws for it: coloured artwork ignores the chip's accent and
-          // makes the composer chip read differently from the same chip in a sent message.
-          iconUri:
-            token.type === "mention"
-              ? fileIconUri(token.value)
-              : record?.kind === "mention" && "path" in record
-                ? fileIconUri(record.path)
-                : null,
+          iconUri: contextChipIconUri(icon),
+          tintsIcon: icon.kind === "chip",
         };
       }),
     );
@@ -286,6 +284,8 @@ export function ComposerEditor({
       editable={props.editable ?? true}
       readOnly={props.readOnly ?? false}
       enterBehavior={props.enterBehavior ?? DEFAULT_COMPOSER_ENTER_BEHAVIOR}
+      submitTitle={props.submitTitle ?? "Send Message"}
+      alternateSubmitTitle={props.alternateSubmitTitle ?? props.submitTitle ?? "Send Message"}
       scrollEnabled={props.scrollEnabled ?? true}
       autoFocus={props.autoFocus ?? false}
       autoCorrect={props.autoCorrect ?? true}
@@ -357,7 +357,16 @@ export function ComposerEditor({
       }}
       onComposerFocus={onFocus}
       onComposerBlur={onBlur}
-      onComposerSubmit={onSubmit}
+      onComposerContentSizeChange={
+        onContentSizeChange === undefined
+          ? undefined
+          : (event) => onContentSizeChange(event.nativeEvent)
+      }
+      onComposerSubmit={
+        onSubmit === undefined
+          ? undefined
+          : (event) => onSubmit(event.nativeEvent.alternate === true)
+      }
     />
   );
 }

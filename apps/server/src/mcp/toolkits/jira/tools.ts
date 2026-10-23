@@ -4,21 +4,24 @@ import {
   JiraIssueKey,
   JiraIssueSummary,
   McpCapabilityUnavailableError,
+  OrchestratorMcpFailure,
   TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import * as Tool from "effect/unstable/ai/Tool";
-import * as Toolkit from "effect/unstable/ai/Toolkit";
+import * as Tool from "effect/ai/Tool";
+import * as Toolkit from "effect/ai/Toolkit";
 
 import * as ServerConfig from "../../../config.ts";
 import * as FolderService from "../../../folder/FolderService.ts";
 import * as JiraService from "../../../jira/JiraService.ts";
 import * as McpInvocationContext from "../../McpInvocationContext.ts";
-import * as ProjectionSnapshotQuery from "../../../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadManagementService from "../../../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../../../project/ProjectService.ts";
 
 const dependencies = [
   McpInvocationContext.McpInvocationContext,
-  ProjectionSnapshotQuery.ProjectionSnapshotQuery,
+  ThreadManagementService.ThreadManagementService,
+  ProjectService.ProjectService,
   FolderService.FolderService,
   JiraService.JiraService,
   ServerConfig.ServerConfig,
@@ -33,19 +36,22 @@ export class JiraToolError extends Schema.TaggedError<JiraToolError>()("JiraTool
   }
 }
 
-const JiraToolFailure = Schema.Union([JiraToolError, McpCapabilityUnavailableError]);
+const JiraToolFailure = Schema.Union([
+  JiraToolError,
+  McpCapabilityUnavailableError,
+  OrchestratorMcpFailure,
+]);
 
 const KeyInput = Schema.Struct({
   key: JiraIssueKey.annotate({ description: "Ticket key, for example DW-123." }),
 });
 
-export const FolderJiraTicketsResult = Schema.Struct({
+const FolderJiraTicketsResult = Schema.Struct({
   folder: Schema.NullOr(Schema.String).annotate({
     description: "The folder this thread works in, or null outside a folder.",
   }),
   tickets: Schema.Array(JiraIssueSummary),
 });
-export type FolderJiraTicketsResult = typeof FolderJiraTicketsResult.Type;
 
 const ListFolderTicketsTool = Tool.make("list_folder_jira_tickets", {
   description:
