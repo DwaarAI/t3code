@@ -38,12 +38,12 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 
-import { writeFileStringAtomically } from "../atomicWrite.ts";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import * as ServerConfig from "../config.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import {
   FOLDER_CONTEXT_DIR,
   FOLDER_CONTEXT_SUBDIRS,
@@ -109,15 +109,15 @@ export const make = Effect.gen(function* () {
   const serverConfig = yield* ServerConfig.ServerConfig;
   const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
-  const orchestrationEngine = yield* OrchestrationEngine.OrchestrationEngineService;
-  const snapshotQuery = yield* ProjectionSnapshotQuery.ProjectionSnapshotQuery;
+  const threadManagement = yield* ThreadManagementService.ThreadManagementService;
+  const projects = yield* ProjectService.ProjectService;
   const github = yield* FolderGitHub.FolderGitHub;
   const foldersDir = path.resolve(serverConfig.foldersDir);
   const guidesDir = path.resolve(serverConfig.guidesDir);
   // Manifest writes read-modify-write the file, so mutations run one at a time.
   const mutation = yield* Semaphore.make(1);
 
-  const newId = crypto.randomUUIDv4.pipe(Effect.mapError(ioFailed("Could not generate an id.")));
+  const newId = crypto.randomUUIDv4().pipe(Effect.mapError(ioFailed("Could not generate an id.")));
   const folderDirFor = (slug: string) => path.join(foldersDir, slug);
   const manifestPathFor = (slug: string) => path.join(folderDirFor(slug), FOLDER_MANIFEST_FILE);
   const toFolder = (manifest: FolderManifest): Folder => ({
@@ -161,7 +161,7 @@ export const make = Effect.gen(function* () {
     );
 
   const resolveProjectRoot = (projectId: ProjectId) =>
-    snapshotQuery.getProjectShellById(projectId).pipe(
+    projects.getById(projectId).pipe(
       Effect.mapError(ioFailed("Could not read projects.")),
       Effect.flatMap(
         Option.match({
@@ -425,16 +425,20 @@ export const make = Effect.gen(function* () {
     }) => boolean,
   ) =>
     Effect.gen(function* () {
-      const snapshot = yield* snapshotQuery.getShellSnapshot();
+      const snapshot = yield* threadManagement.getShellSnapshot();
       const threads = snapshot.threads.filter(
-        (thread) => belongs(thread) && thread.archivedAt === null && thread.settledAt == null,
+        (thread) =>
+          belongs(thread) &&
+          thread.archivedAt === null &&
+          thread.settledAt === null &&
+          thread.deletedAt === null,
       );
       for (const thread of threads) {
-        const uuid = yield* crypto.randomUUIDv4;
-        yield* orchestrationEngine.dispatch({
-          type: "thread.settle",
-          commandId: CommandId.make(`server:folder-archive:${uuid}`),
+        const uuid = yield* crypto.randomUUIDv4();
+        yield* threadManagement.settleThread({
           threadId: thread.id,
+          commandId: CommandId.make(`server:folder-archive:${uuid}`),
+          byOwnAgent: false,
         });
       }
     }).pipe(
@@ -751,21 +755,20 @@ export const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const manifest = yield* readManifest(input.slug);
         if (manifest.rootProjectId !== undefined) {
-          const existing = yield* snapshotQuery
-            .getProjectShellById(manifest.rootProjectId)
+          const existing = yield* projects
+            .getById(manifest.rootProjectId)
             .pipe(Effect.mapError(ioFailed("Could not read projects.")));
           if (Option.isSome(existing)) return toFolder(manifest);
         }
         const uuid = yield* newId;
-        const projectId = ProjectId.make(uuid);
-        yield* orchestrationEngine
-          .dispatch({
-            type: "project.create",
+        // A project may already sit at the folder directory, such as one the
+        // user added by hand; reuse it rather than fail on the conflict.
+        const { project } = yield* projects
+          .bootstrap({
             commandId: CommandId.make(`server:folder-root:${uuid}`),
-            projectId,
+            projectId: ProjectId.make(uuid),
             title: manifest.name,
             workspaceRoot: folderDirFor(manifest.slug),
-            createdAt: yield* nowIso,
           })
           .pipe(
             Effect.mapError(
@@ -777,7 +780,7 @@ export const make = Effect.gen(function* () {
                 }),
             ),
           );
-        return yield* writeManifest({ ...manifest, rootProjectId: projectId });
+        return yield* writeManifest({ ...manifest, rootProjectId: project.id });
       }),
     );
 
@@ -815,9 +818,8 @@ export const make = Effect.gen(function* () {
         if (manifest.rootProjectId !== undefined) {
           // The folder session project dies with its directory, threads included.
           const uuid = yield* newId;
-          yield* orchestrationEngine
-            .dispatch({
-              type: "project.delete",
+          yield* projects
+            .delete({
               commandId: CommandId.make(`server:folder-delete:${uuid}`),
               projectId: manifest.rootProjectId,
               force: true,
@@ -838,17 +840,13 @@ export const make = Effect.gen(function* () {
 
   const writeHandoff: FolderService["Service"]["writeHandoff"] = (input) =>
     Effect.gen(function* () {
-      const thread = yield* snapshotQuery
-        .getThreadDetailById(input.threadId, { activityKinds: [] })
-        .pipe(
-          Effect.mapError(ioFailed("Could not read the thread.")),
-          Effect.flatMap(
-            Option.match({
-              onNone: () => fail("not_found", `Thread '${input.threadId}' was not found.`),
-              onSome: Effect.succeed,
-            }),
-          ),
-        );
+      const records = yield* threadManagement
+        .getThreadRecords(input.threadId, ["messages", "plans"])
+        .pipe(Effect.mapError(ioFailed("Could not read the thread.")));
+      const thread = records.thread;
+      if (thread.deletedAt !== null) {
+        return yield* fail("not_found", `Thread '${input.threadId}' was not found.`);
+      }
       const cwd = thread.worktreePath ?? (yield* resolveProjectRoot(thread.projectId));
       const scope = resolveFolderScope(cwd, foldersDir);
       if (scope === null) {
@@ -863,6 +861,8 @@ export const make = Effect.gen(function* () {
       );
       const contents = buildHandoffMarkdown({
         thread,
+        messages: records.messages,
+        plans: records.plans,
         folderName: manifest.name,
         member:
           manifest.members.find((member) => member.worktreePath === thread.worktreePath) ?? null,

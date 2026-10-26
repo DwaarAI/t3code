@@ -1,6 +1,6 @@
 import { type EnvironmentId, type Folder, type FolderMember, WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import type { Atom } from "effect/unstable/reactivity";
+import type { Atom } from "effect/reactivity";
 
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import {

@@ -1,5 +1,8 @@
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
-import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
+import {
+  type EnvironmentThreadShell,
+  threadRuntimeIsActive,
+} from "@t3tools/client-runtime/state/models";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -18,7 +21,7 @@ import {
   TicketIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
-import { memo, useCallback, useMemo } from "react";
+import { memo } from "react";
 
 import { useStartFolderSession, useStartFolderThread } from "../../hooks/useStartFolderThread";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
@@ -38,6 +41,7 @@ import { useRetainedValue, useSidebarRowSubscriptionLease } from "../Sidebar.log
 import { prStatusIndicator } from "../ThreadStatusIndicators";
 import { openJiraTicketsDialog } from "../jira/JiraTicketsDialog";
 import { openAddRepositoryDialog, openCreateFolderDialog } from "./CreateFolderDialog";
+import { folderThreadGroupKey, groupFolderThreads } from "./SidebarFolders.logic";
 
 const ISSUE_STATUSES = ["in-progress", "in-review", "done"] as const;
 const ISSUE_STATUS_LABELS: Record<(typeof ISSUE_STATUSES)[number], string> = {
@@ -91,17 +95,6 @@ interface ActiveFolderThread {
   readonly worktreePath: string | null;
 }
 
-/** Threads grouped by where they run: a member worktree, or a folder session's project. */
-function folderThreadGroupKey(thread: {
-  readonly environmentId: EnvironmentId;
-  readonly projectId: string;
-  readonly worktreePath: string | null;
-}): string {
-  return thread.worktreePath === null
-    ? `${thread.environmentId}\u0000project:${thread.projectId}`
-    : `${thread.environmentId}\u0000${thread.worktreePath}`;
-}
-
 interface FolderEntry {
   readonly environmentId: EnvironmentId;
   readonly folder: Folder;
@@ -128,43 +121,22 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
     Schema.Boolean,
   );
 
-  const { live, archived } = useMemo(() => {
-    const live: FolderEntry[] = [];
-    const archived: FolderEntry[] = [];
-    for (const environment of environments) {
-      for (const folder of environment.folders) {
-        (folder.archivedAt === null ? live : archived).push({
-          environmentId: environment.environmentId,
-          folder,
-        });
-      }
+  const live: FolderEntry[] = [];
+  const archived: FolderEntry[] = [];
+  for (const environment of environments) {
+    for (const folder of environment.folders) {
+      (folder.archivedAt === null ? live : archived).push({
+        environmentId: environment.environmentId,
+        folder,
+      });
     }
-    return { live, archived };
-  }, [environments]);
+  }
+  const threadsByWorktree = groupFolderThreads(props.threads);
 
-  // Latest activity first, keyed by environment and worktree.
-  const threadsByWorktree = useMemo(() => {
-    const byWorktree = new Map<string, EnvironmentThreadShell[]>();
-    for (const thread of props.threads) {
-      if (thread.archivedAt !== null) continue;
-      const key = folderThreadGroupKey(thread);
-      const list = byWorktree.get(key);
-      if (list) list.push(thread);
-      else byWorktree.set(key, [thread]);
-    }
-    for (const list of byWorktree.values()) {
-      list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    }
-    return byWorktree;
-  }, [props.threads]);
-
-  const toggleFolder = useCallback(
-    (key: string) =>
-      setCollapsed((current) =>
-        current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
-      ),
-    [setCollapsed],
-  );
+  const toggleFolder = (key: string) =>
+    setCollapsed((current) =>
+      current.includes(key) ? current.filter((entry) => entry !== key) : [...current, key],
+    );
 
   if (environments.length === 0) return null;
 
@@ -184,7 +156,7 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
   };
 
   return (
-    <div className="flex flex-col gap-0.5 px-[var(--sidebar-content-inset)] pb-1">
+    <div className="flex flex-col gap-0.5 px-(--sidebar-content-inset) pb-1">
       <div className="flex h-7 items-center gap-2 px-2 text-sidebar-muted-foreground/70 text-xs">
         <span className="font-medium">Folders</span>
         <span aria-hidden className="h-px min-w-2 flex-1 bg-sidebar-border/60" />
@@ -463,7 +435,7 @@ function FolderSessionRow(props: {
   const router = useRouter();
   const startFolderSession = useStartFolderSession();
   const threads = props.threads ?? [];
-  const running = threads.some((thread) => thread.session?.status === "running");
+  const running = threads.some((thread) => threadRuntimeIsActive(thread.runtime));
   const newSession = () => void startFolderSession(environmentId, folder);
   const open = () => {
     const latest = threads[0];
@@ -555,7 +527,7 @@ function FolderMemberRow(props: {
   };
   const isArchived = member.archivedAt !== null;
   const threads = props.threads ?? [];
-  const running = threads.some((thread) => thread.session?.status === "running");
+  const running = threads.some((thread) => threadRuntimeIsActive(thread.runtime));
   // The worktree's git status carries its branch's pull request. Rows only
   // subscribe near the viewport, and share the query with the thread rows and
   // chat header for the same worktree.

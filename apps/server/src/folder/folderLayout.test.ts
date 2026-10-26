@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import type { OrchestrationThread } from "@t3tools/contracts";
+import type { OrchestrationV2AppThread, OrchestrationV2PlanArtifact } from "@t3tools/contracts";
 
 import {
   buildHandoffMarkdown,
@@ -83,29 +83,34 @@ describe("slugifyFolderName", () => {
 });
 
 describe("buildHandoffMarkdown", () => {
-  const message = (role: "user" | "assistant", text: string, streaming = false) =>
-    ({ role, text, streaming }) as OrchestrationThread["messages"][number];
+  const message = (role: "user" | "assistant", text: string, streaming = false) => ({
+    role,
+    text,
+    streaming,
+  });
 
-  const thread = (messages: OrchestrationThread["messages"]) =>
-    ({
-      id: "thread-1",
-      title: "Implement search",
-      branch: "feat/search",
-      worktreePath: "/f/search/api",
-      modelSelection: { instanceId: "claude", model: "opus" },
-      proposedPlans: [],
-      messages,
-    }) as unknown as OrchestrationThread;
+  const thread = {
+    id: "thread-1",
+    title: "Implement search",
+    branch: "feat/search",
+    worktreePath: "/f/search/api",
+    modelSelection: { instanceId: "claude", model: "opus" },
+  } as unknown as OrchestrationV2AppThread;
+
+  const plan = (markdown: string, status: OrchestrationV2PlanArtifact["status"]) =>
+    ({ kind: "proposed_plan", markdown, status }) as OrchestrationV2PlanArtifact;
 
   it("pairs each request with the agent's final reply", () => {
     const note = buildHandoffMarkdown({
-      thread: thread([
+      thread,
+      messages: [
         message("user", "Add search"),
         message("assistant", "Looking into it"),
         message("assistant", "Search is done"),
         message("user", "Now add tests"),
         message("assistant", "partial", true),
-      ]),
+      ],
+      plans: [],
       folderName: "Search",
       member: null,
       writtenAt: "2026-09-22T10:00:00.000Z",
@@ -122,7 +127,9 @@ describe("buildHandoffMarkdown", () => {
       message("assistant", `${long} reply ${index}`),
     ]).flat();
     const note = buildHandoffMarkdown({
-      thread: thread(messages),
+      thread,
+      messages,
+      plans: [],
       folderName: "Search",
       member: null,
       writtenAt: "2026-09-22T10:00:00.000Z",
@@ -131,6 +138,23 @@ describe("buildHandoffMarkdown", () => {
     expect(note).toContain("request 39\n");
     expect(note).toMatch(/_\d+ earlier exchanges omitted\._/);
     expect(note.length).toBeLessThan(100_000);
+  });
+
+  it("includes the newest plan that was not superseded", () => {
+    const note = buildHandoffMarkdown({
+      thread,
+      messages: [],
+      plans: [
+        plan("Old plan", "active"),
+        plan("Current plan", "active"),
+        plan("Dropped", "superseded"),
+      ],
+      folderName: "Search",
+      member: null,
+      writtenAt: "2026-09-22T10:00:00.000Z",
+    });
+    expect(note).toContain("## Latest plan\n\nCurrent plan\n");
+    expect(note).not.toContain("Old plan");
   });
 });
 

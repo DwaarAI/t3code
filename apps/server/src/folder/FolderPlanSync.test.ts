@@ -1,12 +1,12 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
-  type OrchestrationEvent,
-  type OrchestrationProjectShell,
-  type OrchestrationThreadShell,
+  type OrchestrationV2DomainEvent,
+  type OrchestrationV2ThreadShell,
+  type Project,
   ProjectId,
-  ThreadId,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -14,25 +14,24 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import * as ServerConfig from "../config.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as FolderPlanSync from "./FolderPlanSync.ts";
 
-type PlanEvent = Extract<OrchestrationEvent, { type: "thread.proposed-plan-upserted" }>;
+type PlanEvent = Extract<OrchestrationV2DomainEvent, { type: "turn-item.updated" }>;
 
-const planEvent = (threadId: string, planId: string, implementedAt: string | null) =>
+const planEvent = (threadId: string, planId: string, options?: { readonly streaming?: boolean }) =>
   ({
-    type: "thread.proposed-plan-upserted",
+    type: "turn-item.updated",
+    threadId,
+    occurredAt: DateTime.makeUnsafe("2026-09-24T09:00:00.000Z"),
     payload: {
-      threadId: ThreadId.make(threadId),
-      proposedPlan: {
-        id: planId,
-        turnId: null,
-        planMarkdown: `# Plan ${planId}\n\n1. Build it\n`,
-        implementedAt,
-        implementationThreadId: null,
-        createdAt: "2026-09-24T08:15:00.000Z",
-        updatedAt: "2026-09-24T08:15:00.000Z",
-      },
+      type: "proposed_plan",
+      threadId,
+      planId,
+      markdown: `# Plan ${planId}\n\n1. Build it\n`,
+      streaming: options?.streaming ?? false,
+      startedAt: DateTime.makeUnsafe("2026-09-24T08:15:00.000Z"),
     },
   }) as unknown as PlanEvent;
 
@@ -47,7 +46,7 @@ const withMirror = <A, E>(
     const path = yield* Path.Path;
     const config = yield* ServerConfig.ServerConfig;
     const folderDir = path.join(path.resolve(config.foldersDir), "checkout");
-    const threads: Record<string, Partial<OrchestrationThreadShell>> = {
+    const threads: Record<string, Partial<OrchestrationV2ThreadShell>> = {
       "t-repo": {
         title: "API work",
         projectId: ProjectId.make("p-api"),
@@ -63,18 +62,20 @@ const withMirror = <A, E>(
     const projects: Record<string, string> = { "p-api": "/repos/api", "p-folder": folderDir };
     const mirror = yield* FolderPlanSync.makePlanMirror.pipe(
       Effect.provide(
-        Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
-          getThreadShellById: (threadId) =>
-            Effect.succeed(
-              Option.fromNullishOr(threads[threadId] as OrchestrationThreadShell | undefined),
-            ),
-          getProjectShellById: (projectId) =>
-            Effect.succeed(
-              projects[projectId]
-                ? Option.some({ workspaceRoot: projects[projectId] } as OrchestrationProjectShell)
-                : Option.none(),
-            ),
-        }),
+        Layer.mergeAll(
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            getThreadShell: (threadId) =>
+              Effect.succeed((threads[threadId] as OrchestrationV2ThreadShell | undefined) ?? null),
+          }),
+          Layer.mock(ProjectService.ProjectService)({
+            getById: (projectId) =>
+              Effect.succeed(
+                projects[projectId]
+                  ? Option.some({ workspaceRoot: projects[projectId] } as Project)
+                  : Option.none(),
+              ),
+          }),
+        ),
       ),
     );
     return yield* body({ mirror, contextDir: path.join(folderDir, ".context") });
@@ -92,7 +93,7 @@ describe("FolderPlanSync", () => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        yield* mirror(planEvent("t-repo", "plan-aaaa1111", null));
+        yield* mirror(planEvent("t-repo", "plan-aaaa1111"));
 
         const saved = yield* fs.readDirectory(path.join(contextDir, "plans"));
         expect(saved).toEqual(["2026-09-24-0815-api-work-planaaaa.md"]);
@@ -104,14 +105,14 @@ describe("FolderPlanSync", () => {
     ),
   );
 
-  it.effect("keeps plan.md on the newest plan when an older one is marked implemented", () =>
+  it.effect("keeps plan.md on the newest plan when an older one is updated again", () =>
     withMirror(({ mirror, contextDir }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
-        yield* mirror(planEvent("t-folder", "plan-old00000", null));
-        yield* mirror(planEvent("t-folder", "plan-new00000", null));
-        yield* mirror(planEvent("t-folder", "plan-old00000", "2026-09-24T09:00:00.000Z"));
+        yield* mirror(planEvent("t-folder", "plan-old00000"));
+        yield* mirror(planEvent("t-folder", "plan-new00000"));
+        yield* mirror(planEvent("t-folder", "plan-old00000"));
 
         const current = yield* fs.readFileString(path.join(contextDir, "plan.md"));
         expect(current).toContain("# Plan plan-new00000");
@@ -121,12 +122,13 @@ describe("FolderPlanSync", () => {
     ),
   );
 
-  it.effect("ignores threads outside folders", () =>
+  it.effect("ignores threads outside folders and plans still streaming", () =>
     withMirror(({ mirror, contextDir }) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        yield* mirror(planEvent("t-plain", "plan-bbbb2222", null));
-        yield* mirror(planEvent("t-missing", "plan-cccc3333", null));
+        yield* mirror(planEvent("t-plain", "plan-bbbb2222"));
+        yield* mirror(planEvent("t-missing", "plan-cccc3333"));
+        yield* mirror(planEvent("t-repo", "plan-dddd4444", { streaming: true }));
         expect(yield* fs.exists(contextDir)).toBe(false);
       }),
     ),

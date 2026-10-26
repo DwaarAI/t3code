@@ -4,11 +4,11 @@ import {
   type Folder,
   type FolderMember,
   ProjectId,
-  ProviderInstanceId,
   ThreadId,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
+import { makeThreadShellFixture } from "../../test-fixtures";
 import { buildFolderList, buildFolderThreads } from "./folderList";
 
 const environmentId = EnvironmentId.make("environment-1");
@@ -41,28 +41,13 @@ function makeFolder(input: Partial<Folder> & Pick<Folder, "slug" | "name">): Fol
 function makeThread(
   input: Partial<EnvironmentThreadShell> & Pick<EnvironmentThreadShell, "id" | "projectId">,
 ): EnvironmentThreadShell {
-  return {
+  return makeThreadShellFixture({
     environmentId,
     title: input.id,
-    modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
-    runtimeMode: "full-access",
-    interactionMode: "default",
-    branch: null,
-    worktreePath: null,
-    pullRequests: [],
-    latestTurn: null,
     createdAt: "2026-06-01T00:00:00.000Z",
     updatedAt: "2026-06-01T00:00:00.000Z",
-    archivedAt: null,
-    session: null,
-    latestUserMessageAt: null,
-    hasPendingApprovals: false,
-    hasPendingUserInput: false,
-    hasActionableProposedPlan: false,
-    settledOverride: null,
-    settledAt: null,
     ...input,
-  };
+  });
 }
 
 const web = makeMember("web");

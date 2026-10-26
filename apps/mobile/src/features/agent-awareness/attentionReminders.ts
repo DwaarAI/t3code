@@ -1,16 +1,13 @@
 import { useAtomValue } from "@effect/atom-react";
 import {
   ATTENTION_REMINDER_ID_PREFIX,
-  type AttentionReminderEnvironment,
   attentionReminderTitle,
   planAttentionReminders,
-  threadAttentionReminder,
 } from "@t3tools/client-runtime/attention-reminders";
 import { enabledEnvironmentIds } from "@t3tools/client-runtime/state/connections";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { DEFAULT_ATTENTION_REMINDER_MINUTES } from "@t3tools/contracts/settings";
-import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
 import * as Notifications from "expo-notifications";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
@@ -18,40 +15,26 @@ import { Platform } from "react-native";
 import { environmentCatalog } from "../../connection/catalog";
 import { mobilePreferencesAtom } from "../../state/preferences";
 import { environmentShell } from "../../state/shell";
+import {
+  type AttentionReminderSelection,
+  selectAttentionReminderEnvironments,
+} from "./attentionReminderEnvironments";
 
 const CHANNEL_ID = "agent-alerts";
 
-/**
- * Only the threads that need a reminder, so the worker re-renders when a
- * request appears or is handled rather than on every shell update. `null`
- * until the catalog loads: an empty catalog would cancel every reminder.
- */
-let previous: { key: string; environments: ReadonlyArray<AttentionReminderEnvironment> } | null =
-  null;
+/** `null` until the catalog loads: an empty catalog would cancel every reminder. */
+let previous: AttentionReminderSelection | null = null;
 const attentionReminderEnvironmentsAtom = Atom.make((get) => {
   const catalog = get(environmentCatalog.catalogValueAtom);
   if (!catalog.isReady) return null;
-  const nowMs = Date.now();
-  const environments: AttentionReminderEnvironment[] = [];
-  const keyParts: string[] = [];
-  for (const environmentId of enabledEnvironmentIds(catalog)) {
-    const state = get(environmentShell.stateValueAtom(environmentId));
-    const live = state.status === "live" && Option.isSome(state.snapshot);
-    const threads = Option.isSome(state.snapshot)
-      ? state.snapshot.value.threads.filter(
-          (thread) => threadAttentionReminder(environmentId, thread, nowMs) !== null,
-        )
-      : [];
-    environments.push({ environmentId, live, threads: live ? threads : [] });
-    keyParts.push(`${environmentId}:${live}`);
-    if (live) {
-      for (const thread of threads) {
-        keyParts.push(threadAttentionReminder(environmentId, thread, nowMs)!.id);
-      }
-    }
-  }
-  const key = keyParts.join("|");
-  if (previous?.key !== key) previous = { key, environments };
+  previous = selectAttentionReminderEnvironments(
+    Array.from(enabledEnvironmentIds(catalog), (environmentId) => ({
+      environmentId,
+      state: get(environmentShell.stateValueAtom(environmentId)),
+    })),
+    Date.now(),
+    previous,
+  );
   return previous.environments;
 }).pipe(Atom.withLabel("mobile:attention-reminder-environments"));
 

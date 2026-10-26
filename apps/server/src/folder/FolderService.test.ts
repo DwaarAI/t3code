@@ -2,13 +2,15 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
   GitCommandError,
-  type OrchestrationCommand,
-  type OrchestrationProjectShell,
-  type OrchestrationShellSnapshot,
-  type OrchestrationThread,
+  type OrchestrationV2ConversationMessage,
+  type OrchestrationV2PlanArtifact,
+  type OrchestrationV2ThreadShell,
+  type OrchestrationV2ThreadShellSnapshot,
+  type Project,
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -17,8 +19,8 @@ import * as Path from "effect/Path";
 
 import * as ServerConfig from "../config.ts";
 import * as GitWorkflowService from "../git/GitWorkflowService.ts";
-import * as OrchestrationEngine from "../orchestration/Services/OrchestrationEngine.ts";
-import * as ProjectionSnapshotQuery from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
+import * as ProjectService from "../project/ProjectService.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as FolderGitHub from "./FolderGitHub.ts";
 import * as FolderService from "./FolderService.ts";
@@ -35,11 +37,17 @@ interface Harness {
     path: string;
   }>;
   readonly removedWorktrees: string[];
-  readonly dispatched: OrchestrationCommand[];
+  /** Project and thread commands the service issued, in order. */
+  readonly dispatched: Array<{ readonly type: string } & Record<string, unknown>>;
   readonly dirtyWorktrees: Set<string>;
   readonly existingBranches: Set<string>;
   readonly github: string[];
-  threads: ReadonlyArray<Partial<OrchestrationThread>>;
+  threads: ReadonlyArray<
+    Partial<OrchestrationV2ThreadShell> & {
+      readonly messages?: ReadonlyArray<OrchestrationV2ConversationMessage>;
+      readonly plans?: ReadonlyArray<OrchestrationV2PlanArtifact>;
+    }
+  >;
 }
 
 const makeHarness = (): Harness => ({
@@ -112,26 +120,57 @@ const makeLayer = (harness: Harness) =>
       }),
     ),
     Layer.provide(
-      Layer.mock(ProjectionSnapshotQuery.ProjectionSnapshotQuery)({
-        getProjectShellById: (projectId) =>
+      Layer.mock(ProjectService.ProjectService)({
+        getById: (projectId) =>
           Effect.succeed(
             projectRoots[projectId]
-              ? Option.some({
-                  id: projectId,
-                  workspaceRoot: projectRoots[projectId],
-                } as OrchestrationProjectShell)
+              ? Option.some({ id: projectId, workspaceRoot: projectRoots[projectId] } as Project)
               : Option.none(),
           ),
+        bootstrap: (input) =>
+          Effect.sync(() => {
+            harness.dispatched.push({ type: "project.create", ...input });
+            projectRoots[input.projectId] = input.workspaceRoot;
+            return {
+              project: { id: input.projectId, workspaceRoot: input.workspaceRoot } as Project,
+              created: true,
+            };
+          }),
+        delete: (input) =>
+          Effect.sync(() => {
+            harness.dispatched.push({ type: "project.delete", ...input });
+            return { id: input.projectId } as Project;
+          }),
+      }),
+    ),
+    Layer.provide(
+      Layer.mock(ThreadManagementService.ThreadManagementService)({
         getShellSnapshot: () =>
-          Effect.succeed({ threads: harness.threads } as unknown as OrchestrationShellSnapshot),
-        getThreadDetailById: (threadId) =>
-          Effect.succeed(
-            Option.fromNullishOr(
-              harness.threads.find((thread) => thread.id === threadId) as
-                | OrchestrationThread
-                | undefined,
-            ),
-          ),
+          Effect.succeed({
+            threads: harness.threads.map((thread) => ({
+              settledAt: null,
+              deletedAt: null,
+              ...thread,
+            })),
+          } as unknown as OrchestrationV2ThreadShellSnapshot),
+        settleThread: (input) =>
+          Effect.sync(() => {
+            harness.dispatched.push({ type: "thread.settle", threadId: input.threadId });
+            return { sequence: harness.dispatched.length };
+          }),
+        getThreadRecords: (threadId) =>
+          Effect.sync(() => {
+            const {
+              messages = [],
+              plans = [],
+              ...thread
+            } = harness.threads.find((candidate) => candidate.id === threadId) ?? {};
+            return {
+              thread: { deletedAt: null, worktreePath: null, ...thread },
+              messages,
+              plans,
+            } as never;
+          }),
       }),
     ),
     Layer.provide(
@@ -160,18 +199,6 @@ const makeLayer = (harness: Harness) =>
         setStatus: (issue, status) =>
           Effect.sync(() => {
             harness.github.push(`status ${issue.repository}#${issue.number}: ${status}`);
-          }),
-      }),
-    ),
-    Layer.provide(
-      Layer.mock(OrchestrationEngine.OrchestrationEngineService)({
-        dispatch: (command) =>
-          Effect.sync(() => {
-            harness.dispatched.push(command);
-            if (command.type === "project.create") {
-              projectRoots[command.projectId] = command.workspaceRoot;
-            }
-            return { sequence: harness.dispatched.length };
           }),
       }),
     ),
@@ -296,7 +323,7 @@ describe("FolderService", () => {
             id: ThreadId.make("t-settled"),
             worktreePath: member.worktreePath,
             archivedAt: null,
-            settledAt: "2026-01-01T00:00:00.000Z",
+            settledAt: DateTime.makeUnsafe("2026-01-01T00:00:00.000Z"),
           },
           { id: ThreadId.make("t-other"), worktreePath: "/elsewhere", archivedAt: null },
         ];
@@ -345,13 +372,17 @@ describe("FolderService", () => {
             worktreePath: member.worktreePath,
             branch: member.branch,
             modelSelection: { instanceId: "claude", model: "opus" } as never,
-            proposedPlans: [],
             messages: [
               { role: "user", text: "Add search", streaming: false } as never,
               { role: "assistant", text: "Added a search index.", streaming: false } as never,
             ],
           },
-          { id: ThreadId.make("t-outside"), title: "Outside", worktreePath: "/repos/api" },
+          {
+            id: ThreadId.make("t-outside"),
+            title: "Outside",
+            projectId: API,
+            worktreePath: null,
+          },
         ];
 
         const { path: notePath } = yield* service.writeHandoff({

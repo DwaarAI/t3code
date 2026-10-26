@@ -8,9 +8,9 @@ import {
 } from "@t3tools/client-runtime/state/folders";
 import type { EnvironmentId, Folder } from "@t3tools/contracts";
 import * as Option from "effect/Option";
-import { AsyncResult, Atom } from "effect/unstable/reactivity";
-import { useMemo } from "react";
+import { AsyncResult, Atom } from "effect/reactivity";
 
+import { folderThreadKeys } from "../components/folders/SidebarFolders.logic";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { readThreadShells } from "./entities";
@@ -69,10 +69,7 @@ export function useFoldersForEnvironment(
   environmentId: EnvironmentId | null,
 ): EnvironmentFolders | null {
   const all = useEnvironmentFolders();
-  return useMemo(
-    () => all.find((entry) => entry.environmentId === environmentId) ?? null,
-    [all, environmentId],
-  );
+  return all.find((entry) => entry.environmentId === environmentId) ?? null;
 }
 
 /** The folder a thread belongs to (null member for a folder session), or null outside folders. */
@@ -82,11 +79,9 @@ export function useFolderForThread(
   worktreePath: string | null | undefined,
 ): (FolderThreadMatch & { readonly environment: EnvironmentFolders }) | null {
   const environment = useFoldersForEnvironment(environmentId);
-  return useMemo(() => {
-    if (environment === null || projectId === null) return null;
-    const match = findFolderForThread(environment.folders, { projectId, worktreePath });
-    return match ? { ...match, environment } : null;
-  }, [environment, projectId, worktreePath]);
+  if (environment === null || projectId === null) return null;
+  const match = findFolderForThread(environment.folders, { projectId, worktreePath });
+  return match ? { ...match, environment } : null;
 }
 
 /** The folder whose member worktree or own directory is `cwd`. */
@@ -95,47 +90,19 @@ export function useFolderForCwd(
   cwd: string | null | undefined,
 ): (FolderThreadMatch & { readonly environment: EnvironmentFolders }) | null {
   const environment = useFoldersForEnvironment(environmentId);
-  return useMemo(() => {
-    if (environment === null) return null;
-    const match = findFolderForCwd(environment.folders, cwd);
-    return match ? { ...match, environment } : null;
-  }, [cwd, environment]);
+  if (environment === null) return null;
+  const match = findFolderForCwd(environment.folders, cwd);
+  return match ? { ...match, environment } : null;
 }
 
-/**
- * Keys for every folder member worktree and folder session project, so thread
- * lists can leave folder threads to the Folders section. See `isFolderThreadKey`.
- */
+/** See `folderThreadKeys`. */
 export function useFolderThreadKeys(): ReadonlySet<string> {
-  const all = useEnvironmentFolders();
-  return useMemo(() => {
-    const keys = new Set<string>();
-    for (const environment of all) {
-      for (const folder of environment.folders) {
-        for (const member of folder.members) {
-          keys.add(`${environment.environmentId}\u0000${member.worktreePath}`);
-        }
-        if (folder.rootProjectId) {
-          keys.add(`${environment.environmentId}\u0000project:${folder.rootProjectId}`);
-        }
-      }
-    }
-    return keys;
-  }, [all]);
+  return useAtomValue(folderThreadKeysAtom);
 }
 
-export function isFolderThreadKey(
-  keys: ReadonlySet<string>,
-  thread: {
-    readonly environmentId: EnvironmentId;
-    readonly projectId: string;
-    readonly worktreePath: string | null;
-  },
-): boolean {
-  return thread.worktreePath === null
-    ? keys.has(`${thread.environmentId}\u0000project:${thread.projectId}`)
-    : keys.has(`${thread.environmentId}\u0000${thread.worktreePath}`);
-}
+const folderThreadKeysAtom = Atom.make((get) => folderThreadKeys(get(environmentFoldersAtom))).pipe(
+  Atom.withLabel("web-folders:thread-keys"),
+);
 
 export function isFolderThread(
   all: ReadonlyArray<EnvironmentFolders>,
