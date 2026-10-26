@@ -335,6 +335,39 @@ describe("thread navigation helpers", () => {
     );
   });
 
+  it("opens Recent activity on mod+e outside the terminal, with no other default on that chord", () => {
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "e", metaKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "MacIntel",
+        context: { terminalFocus: false },
+      }),
+      "recentActivity.toggle",
+    );
+    assert.strictEqual(
+      resolveShortcutCommand(event({ key: "e", ctrlKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: false, composerFocus: true },
+      }),
+      "recentActivity.toggle",
+    );
+    assert.isNull(
+      resolveShortcutCommand(event({ key: "e", ctrlKey: true }), DEFAULT_RESOLVED_KEYBINDINGS, {
+        platform: "Linux",
+        context: { terminalFocus: true },
+      }),
+    );
+    assert.deepEqual(
+      DEFAULT_RESOLVED_KEYBINDINGS.filter(
+        (binding) =>
+          binding.shortcut.key === "e" &&
+          binding.shortcut.modKey &&
+          !binding.shortcut.shiftKey &&
+          !binding.shortcut.altKey,
+      ).map((binding) => binding.command),
+      ["recentActivity.toggle"],
+    );
+  });
+
   it("keeps default thread jumps off the web so the browser can switch tabs", () => {
     const input = event({ key: "1", metaKey: true });
     assert.isNull(

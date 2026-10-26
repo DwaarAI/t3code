@@ -48,6 +48,7 @@ import { AttachmentFileScreen } from "./features/files/AttachmentFileScreen";
 import { ThreadFilesTreeScreen, ThreadFileScreen } from "./features/files/ThreadFilesRouteScreen";
 import { FolderRouteScreen } from "./features/folders/FolderRouteScreen";
 import { FoldersRouteScreen } from "./features/folders/FoldersRouteScreen";
+import { RecentActivityRouteScreen } from "./features/recent-activity/RecentActivityRouteScreen";
 import { AdaptiveWorkspaceLayout } from "./features/layout/AdaptiveWorkspaceLayout";
 import { selectedPullRequestKey } from "./features/pull-requests/pullRequestSelection";
 import {
@@ -663,6 +664,11 @@ const RootStackConfig = createWorkspaceStackNavigator({
     Folder: createNativeStackScreen({
       screen: FolderRouteScreen,
       linking: "folders/:environmentId/:slug",
+      options: SOLID_HEADER_OPTIONS,
+    }),
+    RecentActivity: createNativeStackScreen({
+      screen: RecentActivityRouteScreen,
+      linking: "recent",
       options: SOLID_HEADER_OPTIONS,
     }),
     PullRequest: createNativeStackScreen({
