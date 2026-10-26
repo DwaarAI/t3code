@@ -10,7 +10,7 @@ export interface SidebarHeaderActionsProps {
 
 function FallbackHeaderButton(props: {
   readonly accessibilityLabel: string;
-  readonly icon: "folder" | "gearshape" | "square.and.pencil";
+  readonly icon: "clock.arrow.circlepath" | "folder" | "gearshape" | "square.and.pencil";
   readonly onPress: () => void;
 }) {
   return (
@@ -36,6 +36,11 @@ export function SidebarHeaderActions(props: SidebarHeaderActionsProps) {
   const foldersSupported = useFoldersSupported();
   return (
     <View className="flex-row items-center gap-0.5">
+      <FallbackHeaderButton
+        accessibilityLabel="Open recent activity"
+        icon="clock.arrow.circlepath"
+        onPress={() => navigation.navigate("RecentActivity")}
+      />
       {foldersSupported ? (
         <FallbackHeaderButton
           accessibilityLabel="Open folders"

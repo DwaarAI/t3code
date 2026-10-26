@@ -35,10 +35,19 @@ export function createSidebarHeaderItems(input: {
   readonly filterIcon: string;
   readonly filterMenu: HomeListFilterMenu;
   readonly onOpenSettings: () => void;
+  readonly onOpenRecentActivity: () => void;
   /** Omitted when no connected environment supports folders. */
   readonly onOpenFolders?: () => void;
 }): NativeStackHeaderItem[] {
   return [
+    withNativeGlassHeaderItem({
+      type: "button",
+      axisBehavior: "horizontalOnly",
+      label: "Recent",
+      accessibilityLabel: "Open recent activity",
+      icon: sfSymbolIcon("clock.arrow.circlepath"),
+      onPress: input.onOpenRecentActivity,
+    }),
     ...(input.onOpenFolders
       ? [
           withNativeGlassHeaderItem({

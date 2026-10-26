@@ -43,6 +43,7 @@ import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
 import { SidebarBrandWidthProbe, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { MainAppLocationTracker } from "./sidebar/mainAppLocation";
+import { RecentActivityHost } from "./sidebar/RecentActivity";
 import type { SidebarRouteReveal } from "./sidebar/routeReveal";
 import { useSidebarStageBackdropVariant } from "./SidebarStageBackdrop";
 import { useProjects } from "../state/entities";
@@ -438,6 +439,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <NavigationHistoryShortcuts />
         {isOnSettings ? null : <ThreadUndoShortcut />}
         <MainAppLocationTracker />
+        <RecentActivityHost />
       </SidebarProvider>
     </PanelAnimationSuppressionProvider>
   );
