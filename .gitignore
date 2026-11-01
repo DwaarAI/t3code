@@ -4,8 +4,7 @@ node_modules
 .DS_Store
 *.log
 *.tsbuildinfo
-apps/*/dist
-apps/*/dist-exe
+apps/*/dist*
 infra/*/dist
 .astro
 packages/*/dist
