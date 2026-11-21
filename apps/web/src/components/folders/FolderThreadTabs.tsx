@@ -14,6 +14,7 @@ import { useThreadShells } from "../../state/entities";
 import { useFolderForThread } from "../../state/folders";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { Button } from "../ui/button";
+import { folderTabThreads } from "./SidebarFolders.logic";
 
 /**
  * Browser-style tabs for the threads of one folder worktree, or of the folder
@@ -86,7 +87,7 @@ function FolderThreadTabStrip(
         aria-label={`Threads in ${scopeLabel}`}
         className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
       >
-        {threads.map((thread) => {
+        {folderTabThreads(threads, threadId).map((thread) => {
           const selected = thread.id === threadId;
           return (
             <button
