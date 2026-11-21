@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   folderThreadGroupKey,
+  folderTabThreads,
   folderThreadKeys,
   groupFolderThreads,
   isFolderThreadKey,
@@ -89,5 +90,22 @@ describe("folderThreadKeys", () => {
     expect(
       isFolderThreadKey(keys, thread("other-worktree", { worktreePath: "/repos/api-feature" })),
     ).toBe(false);
+  });
+});
+
+describe("folderTabThreads", () => {
+  const tab = (id: string, relationshipToParent: "fork" | "subagent" | null) => ({
+    id,
+    lineage: { relationshipToParent },
+  });
+  const threads = [tab("root", null), tab("fork", "fork"), tab("sub", "subagent")];
+
+  it("hides subagent threads unless one is open", () => {
+    expect(folderTabThreads(threads, "root").map((entry) => entry.id)).toEqual(["root", "fork"]);
+    expect(folderTabThreads(threads, "sub").map((entry) => entry.id)).toEqual([
+      "root",
+      "fork",
+      "sub",
+    ]);
   });
 });

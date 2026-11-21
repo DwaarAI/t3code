@@ -70,3 +70,20 @@ export function isFolderThreadKey(
 ): boolean {
   return keys.has(folderThreadGroupKey(thread));
 }
+
+/**
+ * Subagent threads stay out of the tab strip; they are reached from the
+ * lineage tile. The open thread always keeps its tab, so a subagent opened
+ * from there shows until the user navigates away.
+ */
+export function folderTabThreads<
+  T extends {
+    readonly id: string;
+    readonly lineage: { readonly relationshipToParent: string | null };
+  },
+>(threads: ReadonlyArray<T>, selectedThreadId: string): T[] {
+  return threads.filter(
+    (thread) =>
+      thread.id === selectedThreadId || thread.lineage.relationshipToParent !== "subagent",
+  );
+}
