@@ -21,10 +21,12 @@ import {
   TicketIcon,
 } from "lucide-react";
 import * as Schema from "effect/Schema";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { memo } from "react";
 
 import { useStartFolderSession, useStartFolderThread } from "../../hooks/useStartFolderThread";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
+import { m } from "../../i18n/messages";
 import { readLocalApi } from "../../localApi";
 import { cn } from "../../lib/utils";
 import { useServerConfigs } from "../../state/entities";
@@ -45,9 +47,14 @@ import { folderThreadGroupKey, groupFolderThreads } from "./SidebarFolders.logic
 
 const ISSUE_STATUSES = ["in-progress", "in-review", "done"] as const;
 const ISSUE_STATUS_LABELS: Record<(typeof ISSUE_STATUSES)[number], string> = {
-  "in-progress": "In progress",
-  "in-review": "In review",
-  done: "Done",
+  "in-progress": msg("In progress", { $context: "issue status" }),
+  "in-review": msg("In review", { $context: "issue status" }),
+  done: msg("Done", { $context: "issue status" }),
+};
+const ISSUE_STATUS_ACTIONS: Record<(typeof ISSUE_STATUSES)[number], string> = {
+  "in-progress": msg("Mark issue in progress"),
+  "in-review": msg("Mark issue in review"),
+  done: msg("Mark issue done"),
 };
 
 const COLLAPSED_FOLDERS_KEY = "t3code:sidebar:collapsed-folders";
@@ -59,7 +66,7 @@ function failureToast(title: string, error: unknown) {
     stackedThreadToast({
       type: "error",
       title,
-      description: error instanceof Error ? error.message : "An error occurred.",
+      description: error instanceof Error ? error.message : m(msg("An error occurred.")),
     }),
   );
 }
@@ -109,6 +116,7 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
   readonly threads: ReadonlyArray<EnvironmentThreadShell>;
   readonly activeWorktree: ActiveFolderThread | null;
 }) {
+  const gt = useGT();
   const environments = useEnvironmentFolders();
   const [collapsed, setCollapsed] = useLocalStorage(
     COLLAPSED_FOLDERS_KEY,
@@ -158,12 +166,14 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
   return (
     <div className="flex flex-col gap-0.5 px-(--sidebar-content-inset) pb-1">
       <div className="flex h-7 items-center gap-2 px-2 text-sidebar-muted-foreground/70 text-xs">
-        <span className="font-medium">Folders</span>
+        <span className="font-medium">
+          <T>Folders</T>
+        </span>
         <span aria-hidden className="h-px min-w-2 flex-1 bg-sidebar-border/60" />
         <Button
           size="icon-micro"
           variant="ghost"
-          aria-label="New folder"
+          aria-label={gt("New folder")}
           onClick={() => openCreateFolderDialog()}
         >
           <FolderPlusIcon />
@@ -175,7 +185,7 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
           onClick={() => openCreateFolderDialog()}
           className="rounded-lg px-2 py-1 text-left text-sidebar-muted-foreground/70 text-xs hover:bg-sidebar-row-hover"
         >
-          Group a feature's worktrees across repositories.
+          <T>Group a feature's worktrees across repositories.</T>
         </button>
       ) : (
         live.map(renderFolder)
@@ -192,7 +202,9 @@ export const SidebarFolders = memo(function SidebarFolders(props: {
               aria-hidden
               className={cn("size-3 shrink-0", archivedExpanded && "rotate-90")}
             />
-            Archived folders ({archived.length})
+            <T>
+              Archived folders (<Var>{archived.length}</Var>)
+            </T>
           </button>
           {archivedExpanded ? archived.map(renderFolder) : null}
         </>
@@ -210,6 +222,8 @@ function FolderGroup(props: {
   activeWorktree: ActiveFolderThread | null;
 }) {
   const { environmentId, folder } = props;
+  const gt = useGT();
+  const messages = useMessages();
   const archiveFolder = useAtomCommand(folderEnvironment.archive, { reportFailure: false });
   const restoreFolder = useAtomCommand(folderEnvironment.restore, { reportFailure: false });
   const setIssueStatus = useAtomCommand(folderEnvironment.setIssueStatus, {
@@ -229,19 +243,23 @@ function FolderGroup(props: {
 
   const remove = async () => {
     const confirmed = await confirmDiscard(
-      `Delete ${folder.name}? Its worktrees and shared .context notes are removed. The branches stay.`,
+      gt("Delete {name}? Its worktrees and shared .context notes are removed. The branches stay.", {
+        name: folder.name,
+      }),
     );
     if (!confirmed) return;
     let result = await deleteFolder({ environmentId, input: { slug: folder.slug } });
     if (
       isDirtyWorktreeFailure(result) &&
       (await confirmDiscard(
-        `Some worktrees in ${folder.name} have uncommitted changes. Delete anyway and discard them?`,
+        gt("Some worktrees in {name} have uncommitted changes. Delete anyway and discard them?", {
+          name: folder.name,
+        }),
       ))
     ) {
       result = await deleteFolder({ environmentId, input: { slug: folder.slug, force: true } });
     }
-    settled("Could not delete the folder", result);
+    settled(gt("Could not delete the folder"), result);
   };
 
   const archive = async () => {
@@ -249,12 +267,14 @@ function FolderGroup(props: {
     if (
       isDirtyWorktreeFailure(result) &&
       (await confirmDiscard(
-        `Some worktrees in ${folder.name} have uncommitted changes. Archive anyway and discard them?`,
+        gt("Some worktrees in {name} have uncommitted changes. Archive anyway and discard them?", {
+          name: folder.name,
+        }),
       ))
     ) {
       result = await archiveFolder({ environmentId, input: { slug: folder.slug, force: true } });
     }
-    settled("Could not archive the folder", result);
+    settled(gt("Could not archive the folder"), result);
   };
 
   return (
@@ -281,14 +301,18 @@ function FolderGroup(props: {
           {issue ? (
             <span className="shrink-0 text-sidebar-muted-foreground/70 text-xs tabular-nums">
               #{issue.number}
-              {issue.status ? ` · ${ISSUE_STATUS_LABELS[issue.status]}` : ""}
+              {issue.status ? ` · ${messages(ISSUE_STATUS_LABELS[issue.status])}` : ""}
             </span>
           ) : null}
         </button>
         <Menu>
           <MenuTrigger
             render={
-              <Button size="icon-micro" variant="ghost" aria-label={`${folder.name} actions`} />
+              <Button
+                size="icon-micro"
+                variant="ghost"
+                aria-label={gt("{name} actions", { name: folder.name })}
+              />
             }
           >
             <EllipsisIcon />
@@ -299,21 +323,25 @@ function FolderGroup(props: {
                 <MenuItem
                   onClick={() =>
                     void restoreFolder({ environmentId, input: { slug: folder.slug } }).then(
-                      (result) => settled("Could not restore the folder", result),
+                      (result) => settled(gt("Could not restore the folder"), result),
                     )
                   }
                 >
-                  Restore folder
+                  <T>Restore folder</T>
                 </MenuItem>
                 <MenuSeparator />
-                <MenuItem onClick={() => void remove()}>Delete folder…</MenuItem>
+                <MenuItem onClick={() => void remove()}>
+                  <T>Delete folder…</T>
+                </MenuItem>
               </>
             ) : (
               <>
                 {issue ? (
                   <>
                     <MenuItem onClick={openIssue}>
-                      Open issue {issue.repository}#{issue.number}
+                      <T>
+                        Open issue <Var>{`${issue.repository}#${issue.number}`}</Var>
+                      </T>
                     </MenuItem>
                     {ISSUE_STATUSES.map((status) => (
                       <MenuItem
@@ -323,32 +351,36 @@ function FolderGroup(props: {
                           void setIssueStatus({
                             environmentId,
                             input: { slug: folder.slug, status },
-                          }).then((result) => settled("Could not update the issue", result))
+                          }).then((result) => settled(gt("Could not update the issue"), result))
                         }
                       >
-                        Mark issue {ISSUE_STATUS_LABELS[status].toLowerCase()}
+                        {messages(ISSUE_STATUS_ACTIONS[status])}
                       </MenuItem>
                     ))}
                     <MenuSeparator />
                   </>
                 ) : null}
                 <MenuItem onClick={() => void startFolderSession(environmentId, folder)}>
-                  New folder session
+                  <T>New folder session</T>
                 </MenuItem>
                 {jiraAvailable ? (
                   <MenuItem onClick={() => openJiraTicketsDialog(environmentId, folder)}>
-                    Jira tickets…
+                    <T>Jira tickets…</T>
                   </MenuItem>
                 ) : null}
                 <MenuItem onClick={() => openAddRepositoryDialog(environmentId, folder)}>
-                  Add repository…
+                  <T>Add repository…</T>
                 </MenuItem>
                 <MenuItem onClick={() => void navigator.clipboard.writeText(folder.contextDir)}>
-                  Copy .context path
+                  <T>Copy .context path</T>
                 </MenuItem>
                 <MenuSeparator />
-                <MenuItem onClick={() => void archive()}>Archive folder</MenuItem>
-                <MenuItem onClick={() => void remove()}>Delete folder…</MenuItem>
+                <MenuItem onClick={() => void archive()}>
+                  <T>Archive folder</T>
+                </MenuItem>
+                <MenuItem onClick={() => void remove()}>
+                  <T>Delete folder…</T>
+                </MenuItem>
               </>
             )}
           </MenuPopup>
@@ -389,7 +421,9 @@ function FolderGroup(props: {
                   aria-hidden
                   className="size-3.5 shrink-0 text-sidebar-muted-foreground"
                 />
-                <span className="truncate">Jira tickets</span>
+                <span className="truncate">
+                  <T>Jira tickets</T>
+                </span>
                 <span className="ml-auto shrink-0 text-sidebar-muted-foreground/60 text-xs tabular-nums">
                   {jiraCount}
                 </span>
@@ -432,6 +466,7 @@ function FolderSessionRow(props: {
   isActive: boolean;
 }) {
   const { environmentId, folder } = props;
+  const gt = useGT();
   const router = useRouter();
   const startFolderSession = useStartFolderSession();
   const threads = props.threads ?? [];
@@ -464,10 +499,12 @@ function FolderSessionRow(props: {
           }
         >
           <LayersIcon aria-hidden className="size-3.5 shrink-0 text-sidebar-muted-foreground" />
-          <span className="truncate">All repositories</span>
+          <span className="truncate">
+            <T>All repositories</T>
+          </span>
           {running ? (
             <span
-              aria-label="Agent running"
+              aria-label={gt("Agent running")}
               className="size-1.5 shrink-0 rounded-full bg-primary"
             />
           ) : null}
@@ -478,14 +515,16 @@ function FolderSessionRow(props: {
           ) : null}
         </TooltipTrigger>
         <TooltipPopup side="right">
-          <span className="block">Folder sessions work across every repository.</span>
+          <span className="block">
+            <T>Folder sessions work across every repository.</T>
+          </span>
           <span className="block font-mono text-muted-foreground">{folder.path}</span>
         </TooltipPopup>
       </Tooltip>
       <Button
         size="icon-micro"
         variant="ghost"
-        aria-label={`New folder session in ${folder.name}`}
+        aria-label={gt("New folder session in {name}", { name: folder.name })}
         onClick={newSession}
       >
         <PlusIcon />
@@ -502,6 +541,7 @@ function FolderMemberRow(props: {
   isActive: boolean;
 }) {
   const { environmentId, folder, member } = props;
+  const gt = useGT();
   const router = useRouter();
   const startFolderThread = useStartFolderThread();
   const archiveMember = useAtomCommand(folderEnvironment.archiveMember, { reportFailure: false });
@@ -512,7 +552,7 @@ function FolderMemberRow(props: {
       environmentId,
       input: { slug: folder.slug, projectId: member.projectId },
     });
-    if (!settled("Could not copy .env files", result) || result._tag !== "Success") return;
+    if (!settled(gt("Could not copy .env files"), result) || result._tag !== "Success") return;
     const copied =
       result.value.folder.members.find((entry) => entry.projectId === member.projectId)?.setup
         ?.envFiles ?? [];
@@ -520,8 +560,11 @@ function FolderMemberRow(props: {
       type: "success",
       title:
         copied.length === 0
-          ? `No .env files to copy into ${member.repoName}`
-          : `Copied ${copied.length} .env file${copied.length === 1 ? "" : "s"} into ${member.repoName}`,
+          ? gt("No .env files to copy into {repo}", { repo: member.repoName })
+          : gt(
+              "{count, plural, one {Copied {count} .env file into {repo}} other {Copied {count} .env files into {repo}}}",
+              { count: copied.length, repo: member.repoName },
+            ),
       ...(copied.length > 0 ? { description: copied.join(", ") } : {}),
     });
   };
@@ -562,12 +605,14 @@ function FolderMemberRow(props: {
     if (
       isDirtyWorktreeFailure(result) &&
       (await confirmDiscard(
-        `${member.repoName} has uncommitted changes. Archive the worktree anyway and discard them?`,
+        gt("{repo} has uncommitted changes. Archive the worktree anyway and discard them?", {
+          repo: member.repoName,
+        }),
       ))
     ) {
       result = await archiveMember({ environmentId, input: { ...input, force: true } });
     }
-    settled("Could not archive the worktree", result);
+    settled(gt("Could not archive the worktree"), result);
   };
 
   return (
@@ -604,11 +649,11 @@ function FolderMemberRow(props: {
           )}
           <span className="truncate">{member.repoName}</span>
           <span className="truncate text-sidebar-muted-foreground/60 text-xs">
-            {isArchived ? "archived" : member.branch}
+            {isArchived ? gt("archived", { $context: "worktree state" }) : member.branch}
           </span>
           {running ? (
             <span
-              aria-label="Agent running"
+              aria-label={gt("Agent running")}
               className="size-1.5 shrink-0 rounded-full bg-primary"
             />
           ) : null}
@@ -622,13 +667,17 @@ function FolderMemberRow(props: {
           {prStatus ? <span className="block">{prStatus.tooltip}</span> : null}
           <span className="block font-mono">{member.worktreePath}</span>
           {member.setup?.baseRef ? (
-            <span className="block text-muted-foreground">Started from {member.setup.baseRef}</span>
+            <span className="block text-muted-foreground">
+              <T>
+                Started from <Var>{member.setup.baseRef}</Var>
+              </T>
+            </span>
           ) : null}
           {member.setup ? (
             <span className="block text-muted-foreground">
               {member.setup.envFiles.length === 0
-                ? "No .env files copied"
-                : `.env files: ${member.setup.envFiles.join(", ")}`}
+                ? gt("No .env files copied")
+                : gt(".env files: {files}", { files: member.setup.envFiles.join(", ") })}
             </span>
           ) : null}
         </TooltipPopup>
@@ -637,7 +686,7 @@ function FolderMemberRow(props: {
         <Button
           size="icon-micro"
           variant="ghost"
-          aria-label={`New thread in ${member.repoName}`}
+          aria-label={gt("New thread in {repo}", { repo: member.repoName })}
           onClick={newThread}
         >
           <PlusIcon />
@@ -646,7 +695,11 @@ function FolderMemberRow(props: {
       <Menu>
         <MenuTrigger
           render={
-            <Button size="icon-micro" variant="ghost" aria-label={`${member.repoName} actions`} />
+            <Button
+              size="icon-micro"
+              variant="ghost"
+              aria-label={gt("{name} actions", { name: member.repoName })}
+            />
           }
         >
           <EllipsisIcon />
@@ -658,22 +711,28 @@ function FolderMemberRow(props: {
                 void restoreMember({
                   environmentId,
                   input: { slug: folder.slug, projectId: member.projectId },
-                }).then((result) => settled("Could not restore the worktree", result))
+                }).then((result) => settled(gt("Could not restore the worktree"), result))
               }
             >
-              Restore worktree
+              <T>Restore worktree</T>
             </MenuItem>
           ) : (
             <>
-              <MenuItem onClick={newThread}>New thread</MenuItem>
+              <MenuItem onClick={newThread}>
+                <T>New thread</T>
+              </MenuItem>
               <MenuItem onClick={() => void recopyEnvFiles()}>
-                Copy .env files from {member.repoName}
+                <T>
+                  Copy .env files from <Var>{member.repoName}</Var>
+                </T>
               </MenuItem>
               <MenuItem onClick={() => void navigator.clipboard.writeText(member.worktreePath)}>
-                Copy worktree path
+                <T>Copy worktree path</T>
               </MenuItem>
               <MenuSeparator />
-              <MenuItem onClick={() => void archive()}>Archive worktree</MenuItem>
+              <MenuItem onClick={() => void archive()}>
+                <T>Archive worktree</T>
+              </MenuItem>
             </>
           )}
         </MenuPopup>

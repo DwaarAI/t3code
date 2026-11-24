@@ -34,14 +34,6 @@ export type MarkdownLinkPresentation =
 
 export type MarkdownFileIcon = keyof typeof MARKDOWN_FILE_ICON_SOURCES;
 
-export type MarkdownLinkIcon = "github";
-
-export function resolveMarkdownLinkIcon(host: string): MarkdownLinkIcon | null {
-  const hostname = host.toLowerCase();
-  if (hostname === "github.com" || hostname.endsWith(".github.com")) return "github";
-  return null;
-}
-
 const FILE_ICON_BY_NAME: Readonly<Record<string, MarkdownFileIcon>> = {
   ".babelrc": "babel",
   ".babelrc.json": "babel",
@@ -158,6 +150,7 @@ const FILE_ICON_BY_EXTENSION: Readonly<Record<string, MarkdownFileIcon>> = {
   bz2: "zip",
   c: "c",
   cc: "cpp",
+  cjs: "javascript",
   cpp: "cpp",
   cxx: "cpp",
   css: "css",
@@ -273,11 +266,7 @@ export function resolveMarkdownLinkPresentation(href: string): MarkdownLinkPrese
     }
   } catch {}
 
-  const target =
-    parseMarkdownFileLink(normalized) ??
-    (/^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*\/)+$/.test(normalized)
-      ? { path: normalized }
-      : null);
+  const target = parseMarkdownFileLink(normalized);
   if (target) {
     return {
       kind: "file",

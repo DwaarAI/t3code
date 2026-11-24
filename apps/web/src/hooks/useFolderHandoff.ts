@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import {
@@ -23,7 +25,7 @@ function failureToast(title: string, error: unknown) {
     stackedThreadToast({
       type: "error",
       title,
-      description: error instanceof Error ? error.message : "An error occurred.",
+      description: error instanceof Error ? error.message : m(msg("An error occurred.")),
     }),
   );
 }
@@ -44,7 +46,7 @@ export function useFolderHandoff() {
     });
     if (written._tag === "Failure") {
       if (!isAtomCommandInterrupted(written)) {
-        failureToast("Could not write the handoff note", squashAtomCommandFailure(written));
+        failureToast(m(msg("Could not write the handoff note")), squashAtomCommandFailure(written));
       }
       return;
     }
@@ -59,7 +61,7 @@ export function useFolderHandoff() {
     );
     if (created._tag === "Failure" || created.value === null) {
       if (created._tag === "Failure") {
-        failureToast("Could not create thread", squashAtomCommandFailure(created));
+        failureToast(m(msg("Could not create thread")), squashAtomCommandFailure(created));
       }
       return;
     }

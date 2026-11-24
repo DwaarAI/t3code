@@ -23,6 +23,8 @@ function shell(
   return {
     status,
     error: Option.none(),
+    generation: 1,
+    removedAt: new Map(),
     snapshot: Option.some({
       schemaVersion: 1,
       snapshotSequence: 1,

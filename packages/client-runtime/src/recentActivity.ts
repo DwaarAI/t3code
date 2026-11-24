@@ -1,6 +1,6 @@
 import type { RecentActivitySort } from "@t3tools/contracts/settings";
 
-export const RECENT_ACTIVITY_LIMIT = 10;
+const RECENT_ACTIVITY_LIMIT = 10;
 
 export interface RecentActivityThread {
   readonly updatedAt: string;

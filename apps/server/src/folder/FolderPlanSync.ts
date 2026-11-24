@@ -1,10 +1,7 @@
 /**
- * FolderPlanSync - Saves plans proposed in folder threads to the folder's
- * `.context`, so every session in the folder works from the same plan.
- *
- * Each proposed plan gets its own file in `plans/`, and a newly finalized plan
- * becomes `plan.md`. A plan that is updated again rewrites its own file but
- * leaves `plan.md` alone, since a newer plan may have replaced it by then.
+ * Saves plans proposed in folder threads to the folder's `.context`: each gets its own
+ * file in `plans/` and a newly finalized one becomes `plan.md`. An updated plan rewrites
+ * only its own file, since a newer plan may have replaced `plan.md` by then.
  */
 import type { OrchestrationV2DomainEvent, OrchestrationV2TurnItem } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";

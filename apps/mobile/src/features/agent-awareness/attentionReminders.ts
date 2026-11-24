@@ -63,11 +63,9 @@ async function cancelAttentionReminder(id: string): Promise<void> {
 }
 
 /**
- * Schedules an OS notification for each thread waiting on an approval or
- * answer. The OS delivers it after the configured delay even if the app is
- * backgrounded or closed; while the app is connected, a request handled on
- * any device cancels it. Scheduled reminders survive app restarts, so the
- * delay is not restarted on launch.
+ * The OS delivers each reminder after the delay even if the app is closed; a request handled on
+ * any device cancels it while connected. Scheduled reminders survive restarts, so the delay is
+ * not restarted on launch.
  */
 export function useAttentionReminderNotifications(): void {
   const environments = useAtomValue(attentionReminderEnvironmentsAtom);
@@ -79,6 +77,7 @@ export function useAttentionReminderNotifications(): void {
   const queue = useRef(Promise.resolve());
   const appliedMinutes = useRef<number | null>(null);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps OS-scheduled notifications in step with pending requests and the delay
   useEffect(() => {
     if (Platform.OS !== "ios" && Platform.OS !== "android") return;
     if (environments === null || minutes === null) return;

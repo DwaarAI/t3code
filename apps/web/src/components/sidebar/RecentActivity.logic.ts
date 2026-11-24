@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m, type MessageResolver } from "~/i18n/messages";
 import {
   scopedProjectKey,
   scopedThreadKey,
@@ -15,9 +17,12 @@ import { formatRelativeTime } from "../../timestampFormat";
 import { resolveThreadLastVisitedAt } from "../Sidebar.logic";
 
 export const RECENT_ACTIVITY_SORT_OPTIONS = [
-  { sort: "updated", label: "Updated" },
-  { sort: "prompt", label: "Prompt" },
-  { sort: "viewed", label: "Viewed" },
+  {
+    sort: "updated",
+    label: msg("Updated", { $context: "recent activity sort, last update time" }),
+  },
+  { sort: "prompt", label: msg("Prompt", { $context: "recent activity sort, last prompt time" }) },
+  { sort: "viewed", label: msg("Viewed", { $context: "recent activity sort, last viewed time" }) },
 ] as const satisfies ReadonlyArray<{ sort: RecentActivitySort; label: string }>;
 
 export function isRecentActivitySort(value: unknown): value is RecentActivitySort {
@@ -41,10 +46,17 @@ export interface RecentActivityRow {
   readonly times: ReadonlyArray<RecentActivityTime>;
 }
 
-export function compactRelativeTime(timestamp: string | null, nowMs: number): string {
-  const relative = timestamp === null ? null : formatRelativeTime(timestamp, nowMs);
-  if (relative === null) return "—";
-  return relative.value === "just now" ? "now" : relative.value;
+export function compactRelativeTime(
+  timestamp: string | null,
+  nowMs: number,
+  resolve: MessageResolver = m,
+): string {
+  const relative = timestamp === null ? null : formatRelativeTime(timestamp, nowMs, resolve);
+  if (relative === null) return "–";
+  // Under a minute there is no "ago" suffix and the value reads "just now".
+  return relative.suffix === null
+    ? resolve(msg("now", { $context: "compact relative time, under a minute ago" }))
+    : relative.value;
 }
 
 type RecentActivityThreadShell = Pick<
@@ -68,7 +80,9 @@ export function buildRecentActivityRows(input: {
   readonly folders: ReadonlyArray<EnvironmentFolders>;
   readonly sort: RecentActivitySort;
   readonly nowMs: number;
+  readonly resolve?: MessageResolver;
 }): ReadonlyArray<RecentActivityRow> {
+  const resolve = input.resolve ?? m;
   const candidates = input.threads.map((thread) => {
     const threadRef = scopeThreadRef(thread.environmentId, thread.id);
     const key = scopedThreadKey(threadRef);
@@ -112,8 +126,8 @@ export function buildRecentActivityRows(input: {
         null,
       times: RECENT_ACTIVITY_SORT_OPTIONS.map((option) => ({
         sort: option.sort,
-        label: option.label,
-        value: compactRelativeTime(timestamps[option.sort], input.nowMs),
+        label: resolve(option.label),
+        value: compactRelativeTime(timestamps[option.sort], input.nowMs, resolve),
         timestamp: timestamps[option.sort],
         active: option.sort === input.sort,
       })),

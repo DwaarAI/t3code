@@ -8,12 +8,6 @@ export interface ComposerPathSearchEntry {
   readonly sourceLabel?: string;
 }
 
-export interface ComposerPathSearchState {
-  readonly entries: ReadonlyArray<ComposerPathSearchEntry>;
-  readonly isPending: boolean;
-  readonly error: string | null;
-}
-
 export interface ComposerPathSearchTarget {
   readonly environmentId: EnvironmentId | null;
   readonly cwd: string | null;

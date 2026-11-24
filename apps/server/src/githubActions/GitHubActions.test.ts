@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -78,7 +79,7 @@ const withActions = <A, E>(
           }),
         ),
         Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-gh-actions-config-" })),
-        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       ),
     ),
   );

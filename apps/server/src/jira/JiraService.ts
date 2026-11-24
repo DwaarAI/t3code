@@ -21,6 +21,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 
@@ -162,7 +163,7 @@ const toComment = (comment: typeof RawComment.Type): JiraComment => ({
 const fail = (reason: JiraErrorReason, detail: string, cause?: unknown) =>
   new JiraError({ reason, detail, ...(cause === undefined ? {} : { cause }) });
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const secrets = yield* ServerSecretStore.ServerSecretStore;
   const httpClient = yield* HttpClient.HttpClient;
@@ -183,12 +184,8 @@ export const make = Effect.gen(function* () {
   );
 
   const requireConnection = readConnection.pipe(
-    Effect.flatMap((connection) =>
-      connection
-        ? Effect.succeed(connection)
-        : Effect.fail(
-            fail("not_configured", "Connect Jira in Settings → Source control to use tickets."),
-          ),
+    Effect.filterOrFail(Predicate.isNotNull, () =>
+      fail("not_configured", "Connect Jira in Settings → Source control to use tickets."),
     ),
   );
 
@@ -211,14 +208,14 @@ export const make = Effect.gen(function* () {
     );
 
   /** Sends one request; resolves to the parsed JSON body, or null for empty replies. */
-  const send = (
-    connection: StoredConnection,
-    action: string,
-    method: "GET" | "POST" | "PUT",
-    path: string,
-    body?: unknown,
-  ) =>
-    Effect.gen(function* () {
+  const send = Effect.fn("JiraService.send")(
+    function* (
+      connection: StoredConnection,
+      action: string,
+      method: "GET" | "POST" | "PUT",
+      path: string,
+      body?: unknown,
+    ) {
       const url = `${connection.baseUrl}/rest/api/3${path}`;
       const base =
         method === "GET"
@@ -233,17 +230,21 @@ export const make = Effect.gen(function* () {
       const request = body === undefined ? authed : yield* HttpClientRequest.bodyJson(authed, body);
       const response = yield* httpClient.execute(request);
       if (response.status < 200 || response.status >= 300) {
-        return yield* Effect.fail(yield* describeFailure(response, action));
+        const failure = yield* describeFailure(response, action);
+        return yield* failure;
       }
       if (response.status === 204) return null;
       return yield* response.json;
-    }).pipe(
-      Effect.catchTags({
-        HttpBodyError: (cause) => Effect.fail(fail("invalid_input", `${action}.`, cause)),
-        HttpClientError: (cause) =>
-          Effect.fail(fail("request_failed", `${action}: ${cause.message}`, cause)),
-      }),
-    );
+    },
+    (effect, _connection, action) =>
+      effect.pipe(
+        Effect.catchTags({
+          HttpBodyError: (cause) => Effect.fail(fail("invalid_input", `${action}.`, cause)),
+          HttpClientError: (cause) =>
+            Effect.fail(fail("request_failed", `${action}: ${cause.message}`, cause)),
+        }),
+      ),
+  );
 
   const decoded = <A, E>(action: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(
@@ -271,8 +272,8 @@ export const make = Effect.gen(function* () {
       })),
     );
 
-  const configure: JiraService["Service"]["configure"] = (input) =>
-    Effect.gen(function* () {
+  const configure: JiraService["Service"]["configure"] = Effect.fn("JiraService.configure")(
+    function* (input) {
       const baseUrl = normalizeSiteUrl(input.baseUrl);
       if (baseUrl === null) {
         return yield* fail("invalid_input", "Enter the Jira site as an https URL.");
@@ -293,16 +294,18 @@ export const make = Effect.gen(function* () {
           ),
         );
       return { configured: true, baseUrl, email: input.email };
-    });
+    },
+  );
 
-  const search: JiraService["Service"]["search"] = (query) =>
-    Effect.gen(function* () {
+  const search: JiraService["Service"]["search"] = Effect.fn("JiraService.search")(
+    function* (query) {
       const connection = yield* requireConnection;
       return yield* searchWith(connection, "Could not search Jira", searchJql(query), SEARCH_LIMIT);
-    });
+    },
+  );
 
-  const summaries: JiraService["Service"]["summaries"] = (keys) =>
-    Effect.gen(function* () {
+  const summaries: JiraService["Service"]["summaries"] = Effect.fn("JiraService.summaries")(
+    function* (keys) {
       if (keys.length === 0) return [];
       const connection = yield* requireConnection;
       const found = yield* searchWith(
@@ -312,10 +315,11 @@ export const make = Effect.gen(function* () {
         keys.length,
       );
       return keys.flatMap((key) => found.find((issue) => issue.key === key) ?? []);
-    });
+    },
+  );
 
-  const getIssue: JiraService["Service"]["getIssue"] = (key) =>
-    Effect.gen(function* () {
+  const getIssue: JiraService["Service"]["getIssue"] = Effect.fn("JiraService.getIssue")(
+    function* (key) {
       const connection = yield* requireConnection;
       const action = `Could not read ${key}`;
       const [issueBody, children, commentsBody, transitionsBody] = yield* Effect.all(
@@ -345,10 +349,11 @@ export const make = Effect.gen(function* () {
           toStatus: transition.to?.name ?? transition.name,
         })),
       };
-    });
+    },
+  );
 
-  const updateIssue: JiraService["Service"]["updateIssue"] = (input) =>
-    Effect.gen(function* () {
+  const updateIssue: JiraService["Service"]["updateIssue"] = Effect.fn("JiraService.updateIssue")(
+    function* (input) {
       const connection = yield* requireConnection;
       const fields: Record<string, unknown> = {};
       if (input.summary !== undefined) fields.summary = input.summary;
@@ -360,20 +365,22 @@ export const make = Effect.gen(function* () {
         });
       }
       return yield* getIssue(input.key);
-    });
+    },
+  );
 
-  const addComment: JiraService["Service"]["addComment"] = (key, markdown) =>
-    Effect.gen(function* () {
+  const addComment: JiraService["Service"]["addComment"] = Effect.fn("JiraService.addComment")(
+    function* (key, markdown) {
       const connection = yield* requireConnection;
       const action = `Could not comment on ${key}`;
       const body = yield* send(connection, action, "POST", `/issue/${key}/comment`, {
         body: markdownToAdf(markdown),
       });
       return toComment(yield* decoded(action, decodeComment(body)));
-    });
+    },
+  );
 
-  const transition: JiraService["Service"]["transition"] = (key, transitionId) =>
-    Effect.gen(function* () {
+  const transition: JiraService["Service"]["transition"] = Effect.fn("JiraService.transition")(
+    function* (key, transitionId) {
       const connection = yield* requireConnection;
       yield* send(
         connection,
@@ -385,7 +392,8 @@ export const make = Effect.gen(function* () {
         },
       );
       return yield* getIssue(key);
-    });
+    },
+  );
 
   return JiraService.of({
     status,

@@ -1,9 +1,10 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { useGT } from "gt-react";
 
 import { DraftInput } from "../ui/draft-input";
 import { ScopedSwitch } from "./ScopedSwitch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
-import { searchableSetting } from "./settingsSearch";
+import { useSearchableSetting } from "./settingsSearch";
 import {
   useScopedSettings,
   useScopedSettingsMixed,
@@ -12,20 +13,24 @@ import {
 
 /** Opt-in GitHub polling that turns labeled issues into folders. */
 export function FolderIssueSettingsSection() {
+  const searchableSetting = useSearchableSetting();
+  const gt = useGT();
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const mixedLabel = useScopedSettingsMixed(["githubIssueFolderLabel"]);
   return (
-    <SettingsSection id="github-issue-folders" title="GitHub issues">
+    <SettingsSection id="github-issue-folders" title={gt("GitHub issues")}>
       <SettingsRow
         serverScoped
         settingKeys={["githubIssueFolders"]}
         {...searchableSetting("github-issue-folders")}
-        description="Every two minutes, open issues with the label below become folders in this environment's GitHub projects. Only issues whose author can push to the repository are used."
+        description={gt(
+          "Every two minutes, open issues with the label below become folders in this environment's GitHub projects. Only issues whose author can push to the repository are used.",
+        )}
         resetAction={
           settings.githubIssueFolders !== DEFAULT_UNIFIED_SETTINGS.githubIssueFolders ? (
             <SettingResetButton
-              label="create folders from GitHub issues"
+              ariaLabel={gt("Reset create folders from GitHub issues")}
               onClick={() =>
                 updateSettings({ githubIssueFolders: DEFAULT_UNIFIED_SETTINGS.githubIssueFolders })
               }
@@ -37,7 +42,7 @@ export function FolderIssueSettingsSection() {
             settingKeys={["githubIssueFolders"]}
             checked={settings.githubIssueFolders}
             onCheckedChange={(checked) => updateSettings({ githubIssueFolders: Boolean(checked) })}
-            aria-label="Create folders from GitHub issues"
+            aria-label={gt("Create folders from GitHub issues")}
           />
         }
       />
@@ -45,11 +50,13 @@ export function FolderIssueSettingsSection() {
         serverScoped
         settingKeys={["githubIssueFolderLabel"]}
         {...searchableSetting("github-issue-folder-label")}
-        description="Issues move to this label with :active once their folder exists, or :error if it could not be created."
+        description={gt(
+          "Issues move to this label with :active once their folder exists, or :error if it could not be created.",
+        )}
         resetAction={
           settings.githubIssueFolderLabel !== DEFAULT_UNIFIED_SETTINGS.githubIssueFolderLabel ? (
             <SettingResetButton
-              label="GitHub issue label"
+              ariaLabel={gt("Reset GitHub issue label")}
               onClick={() =>
                 updateSettings({
                   githubIssueFolderLabel: DEFAULT_UNIFIED_SETTINGS.githubIssueFolderLabel,
@@ -66,9 +73,11 @@ export function FolderIssueSettingsSection() {
             onCommit={(next) => {
               if (next.trim()) updateSettings({ githubIssueFolderLabel: next.trim() });
             }}
-            placeholder={mixedLabel ? "Mixed" : "t3"}
+            placeholder={
+              mixedLabel ? gt("Mixed", { $context: "settings differ across scopes" }) : "t3"
+            }
             spellCheck={false}
-            aria-label="GitHub issue label"
+            aria-label={gt("GitHub issue label")}
           />
         }
       />

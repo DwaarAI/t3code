@@ -105,7 +105,7 @@ function issueQuery(withParent: boolean): string {
   return `query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { issue(number: $number) { ${ISSUE_FIELDS}${parent} } } }`;
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const gh = yield* GhCli.GhCli;
   const serverConfig = yield* ServerConfig.ServerConfig;
@@ -137,8 +137,8 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-  const fetchIssue: FolderGitHub["Service"]["fetchIssue"] = (issue) =>
-    Effect.gen(function* () {
+  const fetchIssue: FolderGitHub["Service"]["fetchIssue"] = Effect.fn("FolderGitHub.fetchIssue")(
+    function* (issue) {
       const [owner, name] = issue.repository.split("/");
       const query = (withParent: boolean) =>
         run(`Could not read ${issue.repository}#${issue.number}`, [
@@ -179,7 +179,8 @@ export const make = Effect.gen(function* () {
             }
           : undefined,
       };
-    });
+    },
+  );
 
   const comment: FolderGitHub["Service"]["comment"] = (issue, body) =>
     run(
@@ -189,23 +190,24 @@ export const make = Effect.gen(function* () {
     ).pipe(Effect.asVoid);
 
   /** Status labels must exist before `gh issue edit` can add them. */
-  const ensureStatusLabels = (repository: string) =>
-    Effect.gen(function* () {
-      if (labelledRepositories.has(repository)) return;
-      for (const [status, label] of Object.entries(STATUS_LABELS)) {
-        yield* run(`Could not create label ${label} in ${repository}`, [
-          "label",
-          "create",
-          label,
-          "--repo",
-          repository,
-          "--color",
-          STATUS_LABEL_COLORS[status as FolderIssueStatus],
-          "--force",
-        ]);
-      }
-      labelledRepositories.add(repository);
-    });
+  const ensureStatusLabels = Effect.fn("FolderGitHub.ensureStatusLabels")(function* (
+    repository: string,
+  ) {
+    if (labelledRepositories.has(repository)) return;
+    for (const [status, label] of Object.entries(STATUS_LABELS)) {
+      yield* run(`Could not create label ${label} in ${repository}`, [
+        "label",
+        "create",
+        label,
+        "--repo",
+        repository,
+        "--color",
+        STATUS_LABEL_COLORS[status as FolderIssueStatus],
+        "--force",
+      ]);
+    }
+    labelledRepositories.add(repository);
+  });
 
   const editLabels: FolderGitHub["Service"]["editLabels"] = (issue, change) =>
     run(`Could not update labels on ${issue.repository}#${issue.number}`, [

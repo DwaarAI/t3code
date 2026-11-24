@@ -10,7 +10,6 @@ import {
   type GitHubActionsErrorReason,
   type GitHubDispatchableWorkflow,
 } from "@t3tools/contracts";
-import { parseGitHubRepositoryNameWithOwnerFromRemoteUrl } from "@t3tools/shared/git";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -28,6 +27,15 @@ import {
   RUN_LIST_FIELDS,
   toWorkflowRun,
 } from "./workflowFile.ts";
+
+/** `owner/repo` for a github.com remote; `gh --repo` needs the name as the remote spells it. */
+function parseGitHubRepositoryNameWithOwnerFromRemoteUrl(url: string | null): string | null {
+  const match =
+    /^(?:git@github\.com:|ssh:\/\/(?:git@)?github\.com\/|https:\/\/github\.com\/|git:\/\/github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/i.exec(
+      url?.trim() ?? "",
+    );
+  return match?.[1]?.trim() || null;
+}
 
 const RUN_LIMIT = 30;
 
@@ -84,7 +92,7 @@ interface BranchTarget {
   readonly branch: string | null;
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -96,8 +104,8 @@ export const make = Effect.gen(function* () {
       .execute({ operation: "GitHubActions.git", cwd, args, allowNonZeroExit: true })
       .pipe(Effect.map((result) => (result.exitCode === 0 ? result.stdout.trim() : "")));
 
-  const resolveTarget = (cwd: string) =>
-    Effect.gen(function* () {
+  const resolveTarget = Effect.fn("GitHubActions.resolveTarget")(
+    function* (cwd: string) {
       const root = yield* gitOutput(cwd, ["rev-parse", "--show-toplevel"]);
       if (root === "") {
         return yield* new GitHubActionsError({
@@ -127,45 +135,46 @@ export const make = Effect.gen(function* () {
         remote,
         branch,
       } satisfies BranchTarget;
-    }).pipe(
-      Effect.catchTags({
-        GitCommandError: (cause) =>
-          Effect.fail(failure("git_failed", `Could not read the branch in ${cwd}`)(cause)),
-      }),
-    );
+    },
+    (effect, cwd) =>
+      effect.pipe(
+        Effect.catchTags({
+          GitCommandError: (cause) =>
+            Effect.fail(failure("git_failed", `Could not read the branch in ${cwd}`)(cause)),
+        }),
+      ),
+  );
 
   /** A target that `gh` can act on: on GitHub, on a branch. */
-  const requireTarget = (cwd: string) =>
-    Effect.gen(function* () {
-      const target = yield* resolveTarget(cwd);
-      if (target.repository === null) {
-        return yield* new GitHubActionsError({
-          reason: "not_github",
-          detail: `The ${target.remote} remote is not a GitHub repository.`,
-        });
-      }
-      return { ...target, repository: target.repository };
-    });
+  const requireTarget = Effect.fn("GitHubActions.requireTarget")(function* (cwd: string) {
+    const target = yield* resolveTarget(cwd);
+    if (target.repository === null) {
+      return yield* new GitHubActionsError({
+        reason: "not_github",
+        detail: `The ${target.remote} remote is not a GitHub repository.`,
+      });
+    }
+    return { ...target, repository: target.repository };
+  });
 
   const run = (cwd: string, detail: string, args: ReadonlyArray<string>, stdin?: string) =>
     gh
       .run({ cwd, args, ...(stdin === undefined ? {} : { stdin }) })
       .pipe(Effect.mapError(failure("github_failed", detail)));
 
-  const readWorkflows = (root: string) =>
-    Effect.gen(function* () {
-      const directory = path.join(root, ".github", "workflows");
-      const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
-      const workflows: GitHubDispatchableWorkflow[] = [];
-      for (const name of names.filter(isWorkflowFileName).toSorted()) {
-        const source = yield* fs
-          .readFileString(path.join(directory, name))
-          .pipe(Effect.orElseSucceed(() => ""));
-        const workflow = readDispatchableWorkflow(`.github/workflows/${name}`, source);
-        if (workflow) workflows.push(workflow);
-      }
-      return workflows;
-    });
+  const readWorkflows = Effect.fn("GitHubActions.readWorkflows")(function* (root: string) {
+    const directory = path.join(root, ".github", "workflows");
+    const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
+    const workflows: GitHubDispatchableWorkflow[] = [];
+    for (const name of names.filter(isWorkflowFileName).toSorted()) {
+      const source = yield* fs
+        .readFileString(path.join(directory, name))
+        .pipe(Effect.orElseSucceed(() => ""));
+      const workflow = readDispatchableWorkflow(`.github/workflows/${name}`, source);
+      if (workflow) workflows.push(workflow);
+    }
+    return workflows;
+  });
 
   const isPushed = (target: BranchTarget) =>
     target.branch === null
@@ -180,46 +189,45 @@ export const make = Effect.gen(function* () {
           Effect.orElseSucceed(() => false),
         );
 
-  const list: GitHubActions["Service"]["list"] = (cwd) =>
-    Effect.gen(function* () {
-      const target = yield* resolveTarget(cwd);
-      const workflows = yield* readWorkflows(target.root);
-      const pushed = yield* isPushed(target);
-      if (target.repository === null || target.branch === null) {
-        return {
-          repository: target.repository,
-          branch: target.branch,
-          pushed,
-          runs: [],
-          workflows,
-        };
-      }
-      const raw = yield* run(target.root, `Could not list workflow runs for ${target.branch}`, [
-        "run",
-        "list",
-        "--repo",
-        target.repository,
-        "--branch",
-        target.branch,
-        "--limit",
-        String(RUN_LIMIT),
-        "--json",
-        RUN_LIST_FIELDS,
-      ]);
-      const rows = yield* decodeRunList(raw).pipe(
-        Effect.mapError(failure("github_failed", "Unexpected workflow run list")),
-      );
+  const list: GitHubActions["Service"]["list"] = Effect.fn("GitHubActions.list")(function* (cwd) {
+    const target = yield* resolveTarget(cwd);
+    const workflows = yield* readWorkflows(target.root);
+    const pushed = yield* isPushed(target);
+    if (target.repository === null || target.branch === null) {
       return {
         repository: target.repository,
         branch: target.branch,
         pushed,
-        runs: rows.map(toWorkflowRun),
+        runs: [],
         workflows,
       };
-    });
+    }
+    const raw = yield* run(target.root, `Could not list workflow runs for ${target.branch}`, [
+      "run",
+      "list",
+      "--repo",
+      target.repository,
+      "--branch",
+      target.branch,
+      "--limit",
+      String(RUN_LIMIT),
+      "--json",
+      RUN_LIST_FIELDS,
+    ]);
+    const rows = yield* decodeRunList(raw).pipe(
+      Effect.mapError(failure("github_failed", "Unexpected workflow run list")),
+    );
+    return {
+      repository: target.repository,
+      branch: target.branch,
+      pushed,
+      runs: rows.map(toWorkflowRun),
+      workflows,
+    };
+  });
 
-  const dispatch: GitHubActions["Service"]["dispatch"] = (input) =>
-    Effect.gen(function* () {
+  const dispatch: GitHubActions["Service"]["dispatch"] = Effect.fn("GitHubActions.dispatch")(
+    function* (input) {
       const target = yield* requireTarget(input.cwd);
       if (target.branch === null) {
         return yield* new GitHubActionsError({
@@ -267,10 +275,11 @@ export const make = Effect.gen(function* () {
         ],
         stdin,
       );
-    });
+    },
+  );
 
-  const cancel: GitHubActions["Service"]["cancel"] = (cwd, runId) =>
-    Effect.gen(function* () {
+  const cancel: GitHubActions["Service"]["cancel"] = Effect.fn("GitHubActions.cancel")(
+    function* (cwd, runId) {
       const target = yield* requireTarget(cwd);
       yield* run(target.root, `Could not cancel run ${runId}`, [
         "run",
@@ -279,10 +288,11 @@ export const make = Effect.gen(function* () {
         "--repo",
         target.repository,
       ]);
-    });
+    },
+  );
 
-  const rerun: GitHubActions["Service"]["rerun"] = (cwd, runId, failedOnly) =>
-    Effect.gen(function* () {
+  const rerun: GitHubActions["Service"]["rerun"] = Effect.fn("GitHubActions.rerun")(
+    function* (cwd, runId, failedOnly) {
       const target = yield* requireTarget(cwd);
       yield* run(target.root, `Could not re-run run ${runId}`, [
         "run",
@@ -292,7 +302,8 @@ export const make = Effect.gen(function* () {
         target.repository,
         ...(failedOnly ? ["--failed"] : []),
       ]);
-    });
+    },
+  );
 
   return GitHubActions.of({ list, dispatch, cancel, rerun });
 });

@@ -24,6 +24,7 @@ import {
   Play,
   RefreshCw,
 } from "lucide-react";
+import { msg, T, useGT, useMessages, Var } from "gt-react";
 import { useId, useState } from "react";
 
 import { cn } from "~/lib/utils";
@@ -52,19 +53,56 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 const RUN_STATE_VISUALS: Record<
   WorkflowRunState,
-  { readonly icon: typeof CircleCheck; readonly className: string; readonly label: string }
+  {
+    readonly icon: typeof CircleCheck;
+    readonly className: string;
+    readonly label: string;
+    /** Lowercase, read before the run's relative time: "failed 5m ago". */
+    readonly status: string;
+  }
 > = {
-  running: { icon: CircleDot, className: "text-info", label: "Running" },
-  success: { icon: CircleCheck, className: "text-success", label: "Succeeded" },
-  failure: { icon: CircleX, className: "text-destructive", label: "Failed" },
-  cancelled: { icon: CircleSlash, className: "text-muted-foreground", label: "Cancelled" },
-  skipped: { icon: CircleMinus, className: "text-muted-foreground", label: "Skipped" },
+  running: {
+    icon: CircleDot,
+    className: "text-info",
+    label: msg("Running", { $context: "workflow run state" }),
+    status: msg("running", { $context: "workflow run state, before a relative time" }),
+  },
+  success: {
+    icon: CircleCheck,
+    className: "text-success",
+    label: msg("Succeeded", { $context: "workflow run state" }),
+    status: msg("succeeded", { $context: "workflow run state, before a relative time" }),
+  },
+  failure: {
+    icon: CircleX,
+    className: "text-destructive",
+    label: msg("Failed", { $context: "workflow run state" }),
+    status: msg("failed", { $context: "workflow run state, before a relative time" }),
+  },
+  cancelled: {
+    icon: CircleSlash,
+    className: "text-muted-foreground",
+    label: msg("Cancelled", { $context: "workflow run state" }),
+    status: msg("cancelled", { $context: "workflow run state, before a relative time" }),
+  },
+  skipped: {
+    icon: CircleMinus,
+    className: "text-muted-foreground",
+    label: msg("Skipped", { $context: "workflow run state" }),
+    status: msg("skipped", { $context: "workflow run state, before a relative time" }),
+  },
 };
 
 function RunStateIcon({ state }: { state: WorkflowRunState }) {
+  const messages = useMessages();
   const visual = RUN_STATE_VISUALS[state];
   const Icon = visual.icon;
-  return <Icon aria-label={visual.label} className={cn("size-3.5 shrink-0", visual.className)} />;
+  return (
+    <Icon
+      aria-label={messages(visual.label)}
+      className={cn("size-3.5 shrink-0", visual.className)}
+    />
+  );
 }
 
 function SectionTitle({ children }: { children: string }) {
@@ -91,6 +129,7 @@ export function GitHubActionsPanel({
   environmentId: EnvironmentId;
   cwd: string;
 }) {
+  const gt = useGT();
   const query = useEnvironmentQuery(
     githubActionsEnvironment.list({ environmentId, input: { cwd } }),
   );
@@ -103,24 +142,27 @@ export function GitHubActionsPanel({
 
   if (!data) {
     return query.error ? (
-      <PanelMessage title="Could not load GitHub Actions" detail={query.error} />
+      <PanelMessage title={gt("Could not load GitHub Actions")} detail={query.error} />
     ) : (
-      <PanelMessage title="Loading GitHub Actions…" detail="Reading this branch's workflow runs." />
+      <PanelMessage
+        title={gt("Loading GitHub Actions…")}
+        detail={gt("Reading this branch's workflow runs.")}
+      />
     );
   }
   if (data.repository === null) {
     return (
       <PanelMessage
-        title="Not a GitHub repository"
-        detail="GitHub Actions appear here when this branch's remote is on GitHub."
+        title={gt("Not a GitHub repository")}
+        detail={gt("GitHub Actions appear here when this branch's remote is on GitHub.")}
       />
     );
   }
   if (data.branch === null) {
     return (
       <PanelMessage
-        title="No branch checked out"
-        detail="Check out a branch to see and run its workflows."
+        title={gt("No branch checked out")}
+        detail={gt("Check out a branch to see and run its workflows.")}
       />
     );
   }
@@ -131,7 +173,10 @@ export function GitHubActionsPanel({
   const onCancel = async (run: GitHubWorkflowRun) => {
     const result = await cancel({ environmentId, input: { cwd, runId: run.id } });
     if (result._tag === "Success") {
-      toastManager.add({ type: "success", title: `Cancelling ${run.workflowName}` });
+      toastManager.add({
+        type: "success",
+        title: gt("Cancelling {workflow}", { workflow: run.workflowName }),
+      });
     }
   };
   const onRerun = async (run: GitHubWorkflowRun, failedOnly: boolean) => {
@@ -140,8 +185,8 @@ export function GitHubActionsPanel({
       toastManager.add({
         type: "success",
         title: failedOnly
-          ? `Re-running failed jobs of ${run.workflowName}`
-          : `Re-running ${run.workflowName}`,
+          ? gt("Re-running failed jobs of {workflow}", { workflow: run.workflowName })
+          : gt("Re-running {workflow}", { workflow: run.workflowName }),
       });
     }
   };
@@ -159,7 +204,7 @@ export function GitHubActionsPanel({
               <Button
                 size="icon-xs"
                 variant="ghost"
-                aria-label="Refresh runs"
+                aria-label={gt("Refresh runs")}
                 disabled={query.isPending}
                 onClick={query.refresh}
               />
@@ -167,7 +212,9 @@ export function GitHubActionsPanel({
           >
             <RefreshCw />
           </TooltipTrigger>
-          <TooltipPopup side="bottom">Refresh runs</TooltipPopup>
+          <TooltipPopup side="bottom">
+            <T>Refresh runs</T>
+          </TooltipPopup>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger
@@ -175,21 +222,25 @@ export function GitHubActionsPanel({
               <Button
                 size="icon-xs"
                 variant="ghost"
-                aria-label="Open on GitHub"
+                aria-label={gt("Open on GitHub")}
                 render={<a href={actionsUrl} target="_blank" rel="noopener noreferrer" />}
               />
             }
           >
             <ExternalLink />
           </TooltipTrigger>
-          <TooltipPopup side="bottom">Open on GitHub</TooltipPopup>
+          <TooltipPopup side="bottom">
+            <T>Open on GitHub</T>
+          </TooltipPopup>
         </Tooltip>
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-3 p-2">
           {!data.pushed ? (
             <p className="rounded-md bg-muted/60 px-2.5 py-2 text-xs text-muted-foreground">
-              {branch} is not pushed yet. Push it to run workflows on it.
+              <T>
+                <Var>{branch}</Var> is not pushed yet. Push it to run workflows on it.
+              </T>
             </p>
           ) : null}
           {query.error ? (
@@ -197,7 +248,7 @@ export function GitHubActionsPanel({
           ) : null}
           {data.workflows.length > 0 ? (
             <section className="flex flex-col gap-0.5">
-              <SectionTitle>Run a workflow</SectionTitle>
+              <SectionTitle>{gt("Run a workflow")}</SectionTitle>
               {data.workflows.map((workflow) => (
                 <div
                   key={workflow.path}
@@ -214,7 +265,7 @@ export function GitHubActionsPanel({
                     onClick={() => setDispatching(workflow)}
                   >
                     <Play />
-                    Run
+                    <T context="button, start a workflow">Run</T>
                   </Button>
                 </div>
               ))}
@@ -222,16 +273,18 @@ export function GitHubActionsPanel({
           ) : null}
           <section className="flex flex-col gap-0.5">
             <div className="flex items-center justify-between gap-2 pr-1">
-              <SectionTitle>{showAll ? "All runs" : "Latest runs"}</SectionTitle>
+              <SectionTitle>{showAll ? gt("All runs") : gt("Latest runs")}</SectionTitle>
               {data.runs.length > 0 ? (
                 <Button size="xs" variant="ghost-muted" onClick={() => setShowAll(!showAll)}>
-                  {showAll ? "Latest per workflow" : `All ${data.runs.length}`}
+                  {showAll
+                    ? gt("Latest per workflow")
+                    : gt("All {count}", { count: data.runs.length })}
                 </Button>
               ) : null}
             </div>
             {runs.length === 0 ? (
               <p className="px-1.5 text-xs text-muted-foreground">
-                {data.pushed ? "No workflow runs on this branch yet." : "No runs yet."}
+                {data.pushed ? gt("No workflow runs on this branch yet.") : gt("No runs yet.")}
               </p>
             ) : (
               runs.map((run) => (
@@ -269,8 +322,10 @@ function RunRow({
   onCancel: () => void;
   onRerun: (failedOnly: boolean) => void;
 }) {
+  const gt = useGT();
+  const messages = useMessages();
   const state = workflowRunState(run);
-  const attempt = run.attempt > 1 ? ` · attempt ${run.attempt}` : "";
+  const attempt = run.attempt > 1 ? ` · ${gt("attempt {attempt}", { attempt: run.attempt })}` : "";
   return (
     <div className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-accent/50">
       <RunStateIcon state={state} />
@@ -286,28 +341,41 @@ function RunRow({
         </p>
         <p className="truncate text-xs text-muted-foreground">
           #{run.number} · {run.event} · {run.headSha.slice(0, 7)} ·{" "}
-          {RUN_STATE_VISUALS[state].label.toLowerCase()} {formatRelativeTimeLabel(run.updatedAt)}
+          {messages(RUN_STATE_VISUALS[state].status)}{" "}
+          {formatRelativeTimeLabel(run.updatedAt, undefined, messages)}
           {attempt}
         </p>
       </a>
       <Menu>
         <MenuTrigger
           render={
-            <Button size="icon-xs" variant="ghost" aria-label={`Actions for run #${run.number}`} />
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label={gt("Actions for run #{number}", { number: run.number })}
+            />
           }
         >
           <EllipsisIcon />
         </MenuTrigger>
         <MenuPopup align="end">
           <MenuItem render={<a href={run.url} target="_blank" rel="noopener noreferrer" />}>
-            Open on GitHub
+            <T>Open on GitHub</T>
           </MenuItem>
-          {state === "running" ? <MenuItem onClick={onCancel}>Cancel run</MenuItem> : null}
+          {state === "running" ? (
+            <MenuItem onClick={onCancel}>
+              <T>Cancel run</T>
+            </MenuItem>
+          ) : null}
           {state === "failure" ? (
-            <MenuItem onClick={() => onRerun(true)}>Re-run failed jobs</MenuItem>
+            <MenuItem onClick={() => onRerun(true)}>
+              <T>Re-run failed jobs</T>
+            </MenuItem>
           ) : null}
           {state !== "running" ? (
-            <MenuItem onClick={() => onRerun(false)}>Re-run all jobs</MenuItem>
+            <MenuItem onClick={() => onRerun(false)}>
+              <T>Re-run all jobs</T>
+            </MenuItem>
           ) : null}
         </MenuPopup>
       </Menu>
@@ -328,6 +396,7 @@ function DispatchDialog({
   workflow: GitHubDispatchableWorkflow;
   onClose: () => void;
 }) {
+  const gt = useGT();
   const id = useId();
   const dispatch = useAtomCommand(githubActionsEnvironment.dispatch);
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -348,8 +417,8 @@ function DispatchDialog({
     if (result._tag !== "Success") return;
     toastManager.add({
       type: "success",
-      title: `Started ${workflow.name}`,
-      description: "The run shows up here within a few seconds.",
+      title: gt("Started {workflow}", { workflow: workflow.name }),
+      description: gt("The run shows up here within a few seconds."),
     });
     onClose();
   };
@@ -370,9 +439,15 @@ function DispatchDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>Run {workflow.name}</DialogTitle>
+            <DialogTitle>
+              <T>
+                Run <Var>{workflow.name}</Var>
+              </T>
+            </DialogTitle>
             <DialogDescription>
-              Starts {workflow.path} on {branch}.
+              <T>
+                Starts <Var>{workflow.path}</Var> on <Var>{branch}</Var>.
+              </T>
             </DialogDescription>
           </DialogHeader>
           {workflow.inputs.length > 0 ? (
@@ -380,7 +455,9 @@ function DispatchDialog({
               <div className="flex flex-col gap-4">
                 {workflow.inputs.map((input) => {
                   const fieldId = `${id}-${input.name}`;
-                  const label = `${input.name}${input.required ? "" : " (optional)"}`;
+                  const label = input.required
+                    ? input.name
+                    : gt("{name} (optional)", { name: input.name });
                   return (
                     <div key={input.name} className="flex flex-col gap-1.5">
                       {input.type === "boolean" ? (
@@ -402,7 +479,7 @@ function DispatchDialog({
                             onValueChange={(value) => setValue(input.name, String(value ?? ""))}
                           >
                             <SelectTrigger id={fieldId}>
-                              <SelectValue placeholder="Choose…" />
+                              <SelectValue placeholder={gt("Choose…")} />
                             </SelectTrigger>
                             <SelectPopup>
                               {input.options.map((option) => (
@@ -435,10 +512,10 @@ function DispatchDialog({
           ) : null}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button type="submit" disabled={missing || submitting}>
-              {submitting ? "Starting…" : "Run workflow"}
+              {submitting ? gt("Starting…") : gt("Run workflow")}
             </Button>
           </DialogFooter>
         </form>

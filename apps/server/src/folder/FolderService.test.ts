@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
@@ -203,7 +204,7 @@ const makeLayer = (harness: Harness) =>
       }),
     ),
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-folder-service-" })),
-    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
   );
 
 /** Runs a test body against one service instance and one temporary T3 home. */

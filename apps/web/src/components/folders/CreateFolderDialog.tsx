@@ -5,10 +5,12 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, Folder, ProjectId } from "@t3tools/contracts";
+import { msg, T, useGT, Var } from "gt-react";
 import { useEffect, useId, useState } from "react";
 import { create } from "zustand";
 
 import { useStartFolderThread } from "../../hooks/useStartFolderThread";
+import { m } from "../../i18n/messages";
 import { useProjects, useServerConfigs } from "../../state/entities";
 import { folderEnvironment, useEnvironmentFolders } from "../../state/folders";
 import { useEnvironmentQuery } from "../../state/query";
@@ -57,6 +59,7 @@ function close() {
 
 export function CreateFolderDialogHost() {
   const request = useRequest((state) => state.request);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears the module-level dialog request when the host unmounts, so a remount does not reopen it
   useEffect(() => () => close(), []);
   return request ? (
     <CreateFolderDialog initialEnvironmentId={request.environmentId} addTo={request.addTo} />
@@ -67,11 +70,20 @@ export function CreateFolderDialogHost() {
 function describeFolderSetup(folder: Folder): string {
   return folder.members
     .map((member) => {
-      const base = member.setup?.baseRef ? `from ${member.setup.baseRef}` : `on ${member.branch}`;
       const envCount = member.setup?.envFiles.length ?? 0;
-      const env =
-        envCount === 0 ? "no .env files" : `${envCount} .env file${envCount === 1 ? "" : "s"}`;
-      return `${member.repoName}: ${base}, ${env}`;
+      return member.setup?.baseRef
+        ? m(
+            msg(
+              "{repo}: from {ref}, {count, plural, =0 {no .env files} one {{count} .env file} other {{count} .env files}}",
+            ),
+            { repo: member.repoName, ref: member.setup.baseRef, count: envCount },
+          )
+        : m(
+            msg(
+              "{repo}: on {ref}, {count, plural, =0 {no .env files} one {{count} .env file} other {{count} .env files}}",
+            ),
+            { repo: member.repoName, ref: member.branch, count: envCount },
+          );
     })
     .join("; ");
 }
@@ -90,6 +102,7 @@ function CreateFolderDialog(props: {
   addTo: Folder | null;
 }) {
   const { addTo } = props;
+  const gt = useGT();
   const id = useId();
   const environments = useEnvironmentFolders();
   const serverConfigs = useServerConfigs();
@@ -149,7 +162,9 @@ function CreateFolderDialog(props: {
           setSubmitting(false);
           if (!isAtomCommandInterrupted(added)) {
             const failure = squashAtomCommandFailure(added);
-            setError(failure instanceof Error ? failure.message : "Could not add the repository.");
+            setError(
+              failure instanceof Error ? failure.message : gt("Could not add the repository."),
+            );
           }
           return;
         }
@@ -175,7 +190,7 @@ function CreateFolderDialog(props: {
     if (result._tag === "Failure") {
       if (!isAtomCommandInterrupted(result)) {
         const failure = squashAtomCommandFailure(result);
-        setError(failure instanceof Error ? failure.message : "Could not create the folder.");
+        setError(failure instanceof Error ? failure.message : gt("Could not create the folder."));
       }
       return;
     }
@@ -183,7 +198,7 @@ function CreateFolderDialog(props: {
     const { folder } = result.value;
     toastManager.add({
       type: "success",
-      title: `Created ${folder.name}`,
+      title: gt("Created {name}", { name: folder.name }),
       description: describeFolderSetup(folder),
     });
     // Land in the first repository so the initial prompt can go straight in.
@@ -209,18 +224,28 @@ function CreateFolderDialog(props: {
           }}
         >
           <DialogHeader>
-            <DialogTitle>{addTo ? `Add repositories to ${addTo.name}` : "New folder"}</DialogTitle>
+            <DialogTitle>
+              {addTo ? gt("Add repositories to {name}", { name: addTo.name }) : gt("New folder")}
+            </DialogTitle>
             <DialogDescription>
               {addTo
-                ? `Each repository gets a worktree on ${addTo.members[0]?.branch ?? "the folder's branch"}.`
-                : "A folder groups one worktree per repository for a feature. Its threads share a .context directory for plans, todos, handoffs, and reviews."}
+                ? addTo.members[0]?.branch
+                  ? gt("Each repository gets a worktree on {branch}.", {
+                      branch: addTo.members[0].branch,
+                    })
+                  : gt("Each repository gets a worktree on the folder's branch.")
+                : gt(
+                    "A folder groups one worktree per repository for a feature. Its threads share a .context directory for plans, todos, handoffs, and reviews.",
+                  )}
             </DialogDescription>
           </DialogHeader>
           <DialogPanel>
             <div className="flex flex-col gap-4">
               {environments.length > 1 && addTo === null ? (
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor={`${id}-environment`}>Environment</Label>
+                  <Label htmlFor={`${id}-environment`}>
+                    <T>Environment</T>
+                  </Label>
                   <Select
                     value={environmentId ?? ""}
                     onValueChange={(value) => {
@@ -248,17 +273,21 @@ function CreateFolderDialog(props: {
               {addTo === null ? (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-name`}>Name</Label>
+                    <Label htmlFor={`${id}-name`}>
+                      <T>Name</T>
+                    </Label>
                     <Input
                       id={`${id}-name`}
                       autoFocus
                       value={name}
-                      placeholder="Auth revamp"
+                      placeholder={gt("Auth revamp", { $context: "example folder name" })}
                       onChange={(event) => setName(event.target.value)}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-branch`}>Branch</Label>
+                    <Label htmlFor={`${id}-branch`}>
+                      <T context="git branch">Branch</T>
+                    </Label>
                     <Input
                       id={`${id}-branch`}
                       value={branch}
@@ -267,7 +296,9 @@ function CreateFolderDialog(props: {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-issue`}>GitHub issue (optional)</Label>
+                    <Label htmlFor={`${id}-issue`}>
+                      <T>GitHub issue (optional)</T>
+                    </Label>
                     <Input
                       id={`${id}-issue`}
                       value={issue}
@@ -276,21 +307,27 @@ function CreateFolderDialog(props: {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor={`${id}-prompt`}>First prompt (optional)</Label>
+                    <Label htmlFor={`${id}-prompt`}>
+                      <T>First prompt (optional)</T>
+                    </Label>
                     <Textarea
                       id={`${id}-prompt`}
                       value={initialPrompt}
-                      placeholder="Starts each repository's first thread."
+                      placeholder={gt("Starts each repository's first thread.")}
                       onChange={(event) => setInitialPrompt(event.target.value)}
                     />
                   </div>
                 </>
               ) : null}
               <fieldset className="flex flex-col gap-2">
-                <legend className="mb-1.5 font-medium">Repositories</legend>
+                <legend className="mb-1.5 font-medium">
+                  <T>Repositories</T>
+                </legend>
                 {projects.length === 0 ? (
                   <p className="text-muted-foreground">
-                    {addTo ? "Every project is already in this folder." : "Add a project first."}
+                    {addTo
+                      ? gt("Every project is already in this folder.")
+                      : gt("Add a project first.")}
                   </p>
                 ) : (
                   projects.map((project) => (
@@ -318,10 +355,10 @@ function CreateFolderDialog(props: {
           </DialogPanel>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button type="submit" disabled={!ready || submitting}>
-              {submitting ? "Working…" : addTo ? "Add repositories" : "Create folder"}
+              {submitting ? gt("Working…") : addTo ? gt("Add repositories") : gt("Create folder")}
             </Button>
           </DialogFooter>
         </form>
@@ -341,6 +378,7 @@ function RepositoryRow(props: {
   onChange: (baseBranch: string | null | undefined) => void;
 }) {
   const { project, baseBranch, onChange } = props;
+  const gt = useGT();
   const selected = baseBranch !== undefined;
   const refs = useEnvironmentQuery(
     selected
@@ -353,6 +391,7 @@ function RepositoryRow(props: {
   const branches = refs.data?.refs ?? NO_REFS;
 
   // Default to the repository's default branch once the list arrives.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- the branch list is an async server query; the parent's selection holds null until it lands, then takes the default once
   useEffect(() => {
     if (baseBranch !== null || branches.length === 0) return;
     const preferred =
@@ -372,7 +411,11 @@ function RepositoryRow(props: {
           <TooltipPopup side="right">
             <span className="font-mono">{project.workspaceRoot}</span>
             {props.environmentLabel ? (
-              <span className="block text-muted-foreground">on {props.environmentLabel}</span>
+              <span className="block text-muted-foreground">
+                <T>
+                  on <Var>{props.environmentLabel}</Var>
+                </T>
+              </span>
             ) : null}
           </TooltipPopup>
         </Tooltip>
@@ -385,8 +428,8 @@ function RepositoryRow(props: {
               if (typeof value === "string" && value) onChange(value);
             }}
           >
-            <SelectTrigger aria-label={`Base branch for ${project.title}`}>
-              <SelectValue placeholder={refs.isPending ? "Loading…" : "Base branch"} />
+            <SelectTrigger aria-label={gt("Base branch for {project}", { project: project.title })}>
+              <SelectValue placeholder={refs.isPending ? gt("Loading…") : gt("Base branch")} />
             </SelectTrigger>
             <SelectPopup>
               {branches.map((ref) => (

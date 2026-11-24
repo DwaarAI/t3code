@@ -4,7 +4,13 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { EnvironmentId, type Folder, type FolderMember } from "@t3tools/contracts";
-import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-navigation/native";
+import {
+  StackActions,
+  useFocusEffect,
+  useNavigation,
+  type StaticScreenProps,
+} from "@react-navigation/native";
+import { useGT } from "gt-react-native";
 import { useState, type ReactNode } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, View } from "react-native";
 
@@ -26,6 +32,7 @@ type FolderRouteParams = {
 };
 
 export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams>) {
+  const gt = useGT();
   const navigation = useNavigation();
   const environmentId = EnvironmentId.make(route.params.environmentId);
   const folder = useFolder(environmentId, route.params.slug);
@@ -40,16 +47,18 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
   // A repository thread reuses the member's worktree; the draft route skips
   // any checkout when it is handed an existing worktree path.
   const startMemberThread = (member: FolderMember) => {
-    navigation.navigate("Thread", {
-      draft: {
-        requestId: uuidv4(),
-        environmentId: String(environmentId),
-        projectId: String(member.projectId),
-        branch: member.branch,
-        worktreePath: member.worktreePath,
-        title: member.repoName,
-      },
-    });
+    navigation.dispatch(
+      StackActions.push("Thread", {
+        draft: {
+          requestId: uuidv4(),
+          environmentId: String(environmentId),
+          projectId: String(member.projectId),
+          branch: member.branch,
+          worktreePath: member.worktreePath,
+          title: member.repoName,
+        },
+      }),
+    );
   };
 
   // A folder session runs in the folder directory, spanning every repository.
@@ -67,35 +76,37 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
       if (!isAtomCommandInterrupted(opened)) {
         const error = squashAtomCommandFailure(opened);
         Alert.alert(
-          "Could not open a folder session",
-          error instanceof Error ? error.message : "An error occurred.",
+          gt("Could not open a folder session"),
+          error instanceof Error ? error.message : gt("An error occurred."),
         );
       }
       return;
     }
     if (!rootProjectId || !project) {
-      Alert.alert("Could not open a folder session", "The folder's project did not load.");
+      Alert.alert(gt("Could not open a folder session"), gt("The folder's project did not load."));
       return;
     }
-    navigation.navigate("Thread", {
-      draft: {
-        requestId: uuidv4(),
-        environmentId: String(environmentId),
-        projectId: String(rootProjectId),
-        title: target.name,
-      },
-    });
+    navigation.dispatch(
+      StackActions.push("Thread", {
+        draft: {
+          requestId: uuidv4(),
+          environmentId: String(environmentId),
+          projectId: String(rootProjectId),
+          title: target.name,
+        },
+      }),
+    );
   };
 
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
-      <AppBar title={folder?.name ?? "Folder"} sidebar={false} onBack={() => navigation.goBack()} />
+      <AppBar title={folder?.name ?? gt("Folder")} onBack={() => navigation.goBack()} />
       <SettingsScreenContent>
         {folder === null ? (
           <View className="p-4">
             <EmptyState
-              title="Folder unavailable"
-              detail="It may have been deleted, or its environment is not connected."
+              title={gt("Folder unavailable")}
+              detail={gt("It may have been deleted, or its environment is not connected.")}
             />
           </View>
         ) : (
@@ -109,12 +120,12 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
               </Text>
             ) : null}
 
-            <SectionLabel title="Start a thread" />
+            <SectionLabel title={gt("Start a thread")} />
             <View className="overflow-hidden rounded-[20px] bg-card">
               <ActionRow
                 icon="folder"
-                title="Folder session"
-                detail="Works across every repository"
+                title={gt("Folder session")}
+                detail={gt("Works across every repository")}
                 trailing={
                   openingSession ? <ActivityIndicator colorClassName="accent-icon" /> : null
                 }
@@ -128,7 +139,9 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
                   icon="arrow.triangle.branch"
                   title={member.repoName}
                   detail={
-                    member.archivedAt === null ? member.branch : `${member.branch} · archived`
+                    member.archivedAt === null
+                      ? member.branch
+                      : gt("{branch} · archived", { branch: member.branch })
                   }
                   // An archived member's worktree is gone from disk; restore it on desktop first.
                   disabled={member.archivedAt !== null}
@@ -138,9 +151,9 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
               ))}
             </View>
 
-            <SectionLabel title="Threads" />
+            <SectionLabel title={gt("Threads")} />
             {folderThreads.length === 0 ? (
-              <Text className="px-1 text-sm text-foreground-muted">No threads yet.</Text>
+              <Text className="px-1 text-sm text-foreground-muted">{gt("No threads yet.")}</Text>
             ) : (
               <View className="overflow-hidden rounded-[20px] bg-card">
                 {folderThreads.map((entry, index) => (
@@ -148,10 +161,12 @@ export function FolderRouteScreen({ route }: StaticScreenProps<FolderRouteParams
                     key={`${entry.thread.environmentId}:${entry.thread.id}`}
                     entry={entry}
                     onPress={() =>
-                      navigation.navigate("Thread", {
-                        environmentId: entry.thread.environmentId,
-                        threadId: entry.thread.id,
-                      })
+                      navigation.dispatch(
+                        StackActions.push("Thread", {
+                          environmentId: entry.thread.environmentId,
+                          threadId: entry.thread.id,
+                        }),
+                      )
                     }
                     showDivider={index < folderThreads.length - 1}
                   />
@@ -182,10 +197,11 @@ function ActionRow(props: {
   readonly showDivider: boolean;
   readonly onPress: () => void;
 }) {
+  const gt = useGT();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`New thread in ${props.title}`}
+      accessibilityLabel={gt("New thread in {name}", { name: props.title })}
       accessibilityState={{ disabled: props.disabled === true }}
       className={`flex-row items-center gap-3 px-4 py-3 active:opacity-70 ${props.disabled ? "opacity-50" : ""} ${props.showDivider ? "border-b border-separator" : ""}`}
       disabled={props.disabled}
@@ -222,11 +238,12 @@ function FolderThreadRow(props: {
   readonly showDivider: boolean;
   readonly onPress: () => void;
 }) {
+  const gt = useGT();
   const { thread, repoName } = props.entry;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open thread ${thread.title}`}
+      accessibilityLabel={gt("Open thread {title}", { title: thread.title })}
       className={`gap-1 px-4 py-3 active:opacity-70 ${props.showDivider ? "border-b border-separator" : ""}`}
       onPress={props.onPress}
     >
@@ -239,7 +256,7 @@ function FolderThreadRow(props: {
         </Text>
       </View>
       <Text className="text-2xs text-foreground-tertiary" numberOfLines={1}>
-        {repoName ?? "Folder session"}
+        {repoName ?? gt("Folder session")}
       </Text>
     </Pressable>
   );

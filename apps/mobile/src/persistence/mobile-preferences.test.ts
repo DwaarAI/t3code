@@ -1,7 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { vi } from "vite-plus/test";
 
 vi.mock("expo-sqlite", () => ({ openDatabaseAsync: vi.fn() }));
@@ -12,19 +11,24 @@ import * as MobilePreferences from "./mobile-preferences";
 import * as MobileSecureStorage from "./mobile-secure-storage";
 
 function loadStored(payload: object) {
-  return MobilePreferences.make().pipe(
+  return MobilePreferences.MobilePreferencesStore.pipe(
     Effect.flatMap((store) => store.load),
     Effect.provide(
-      Layer.mergeAll(
-        Layer.mock(MobileDatabase.MobileDatabase)({
-          loadPreferencesJson: Effect.succeed(
-            Option.some({ payload: JSON.stringify(payload), updatedAt: 1 }),
+      MobilePreferences.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(MobileDatabase.MobileDatabase)({
+              loadPreferencesJson: Effect.succeedSome({
+                payload: JSON.stringify(payload),
+                updatedAt: 1,
+              }),
+            }),
+            Layer.mock(MobileSecureStorage.MobileSecureStorage)({
+              getItem: () => Effect.succeed(null),
+              removeItem: () => Effect.void,
+            }),
           ),
-        }),
-        Layer.mock(MobileSecureStorage.MobileSecureStorage)({
-          getItem: () => Effect.succeed(null),
-          removeItem: () => Effect.void,
-        }),
+        ),
       ),
     ),
   );

@@ -1,13 +1,7 @@
 /**
- * SkillService — lists and edits the skills under `<T3 home>/skills`.
- *
- * Enabled skills live in `skills/<name>/`, the `t3` plugin's skill directory
- * that Claude and Codex sessions load (see `builtinSkills.ts`). Disabled custom
- * skills move to `disabled/<name>/`, which no provider reads. Built-in skills
- * carry a marker file and are rewritten on every start, so only custom skills
- * can be saved, disabled, or deleted.
- *
- * @module skills/SkillService
+ * Enabled skills live in `skills/<name>/`, the `t3` plugin directory Claude and Codex load;
+ * disabled custom skills move to `disabled/<name>/`, which no provider reads. Built-ins carry
+ * a marker and are rewritten on every start, so only custom skills can change.
  */
 import {
   SKILL_ENTRY_FILE,
@@ -24,7 +18,7 @@ import {
   type SkillsSetEnabledInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -101,11 +95,11 @@ function validateSkillFiles(files: ReadonlyArray<SkillFile>): string | null {
   return null;
 }
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const serverConfig = yield* ServerConfig.ServerConfig;
   const enabledDir = serverConfig.skillRootsDir;
   const disabledDir = path.join(serverConfig.skillsDir, "disabled");
@@ -114,46 +108,48 @@ export const make = Effect.gen(function* () {
   // Saves stage a folder and swap it in; one at a time keeps renames simple.
   const mutation = yield* Semaphore.make(1);
 
-  const listFiles = (dir: string) =>
-    Effect.gen(function* () {
-      const files: Array<SkillFileInfo & { readonly absolute: string }> = [];
-      for (const entry of (yield* fs.readDirectory(dir, { recursive: true })).toSorted()) {
-        const absolute = path.join(dir, entry);
-        const info = yield* fs.stat(absolute);
-        const relative = entry.split(path.sep).join("/");
-        if (info.type !== "File" || relative === BUILTIN_SKILL_MARKER) continue;
-        files.push({
-          path: relative,
-          sizeBytes: Number(info.size),
-          executable: (info.mode & 0o111) !== 0,
-          absolute,
-        });
-      }
-      return files;
-    });
+  const listFiles = Effect.fn("SkillService.listFiles")(function* (dir: string) {
+    const files: Array<SkillFileInfo & { readonly absolute: string }> = [];
+    for (const entry of (yield* fs.readDirectory(dir, { recursive: true })).toSorted()) {
+      const absolute = path.join(dir, entry);
+      const info = yield* fs.stat(absolute);
+      const relative = entry.split(path.sep).join("/");
+      if (info.type !== "File" || relative === BUILTIN_SKILL_MARKER) continue;
+      files.push({
+        path: relative,
+        sizeBytes: Number(info.size),
+        executable: (info.mode & 0o111) !== 0,
+        absolute,
+      });
+    }
+    return files;
+  });
 
-  const readSkill = (dir: string, name: string, enabled: boolean) =>
-    Effect.gen(function* () {
-      const files = yield* listFiles(dir);
-      const entry = yield* fs
-        .readFileString(path.join(dir, SKILL_ENTRY_FILE))
-        .pipe(Effect.orElseSucceed(() => ""));
-      const frontmatter = parseSkillFrontmatter(entry);
-      const builtin = yield* fs.exists(path.join(dir, BUILTIN_SKILL_MARKER));
-      const skill: Skill = {
-        name,
-        commandName: builtinSkillCommandName(name),
-        description: frontmatter.kind === "parsed" ? (frontmatter.description ?? null) : null,
-        source: builtin ? "builtin" : "custom",
-        enabled,
-        files: files.map(({ absolute: _absolute, ...info }) => info),
-      };
-      return { skill, files };
-    });
+  const readSkill = Effect.fn("SkillService.readSkill")(function* (
+    dir: string,
+    name: string,
+    enabled: boolean,
+  ) {
+    const files = yield* listFiles(dir);
+    const entry = yield* fs
+      .readFileString(path.join(dir, SKILL_ENTRY_FILE))
+      .pipe(Effect.orElseSucceed(() => ""));
+    const frontmatter = parseSkillFrontmatter(entry);
+    const builtin = yield* fs.exists(path.join(dir, BUILTIN_SKILL_MARKER));
+    const skill: Skill = {
+      name,
+      commandName: builtinSkillCommandName(name),
+      description: frontmatter.kind === "parsed" ? (frontmatter.description ?? null) : null,
+      source: builtin ? "builtin" : "custom",
+      enabled,
+      files: files.map(({ absolute: _absolute, ...info }) => info),
+    };
+    return { skill, files };
+  });
 
   /** Where a skill lives now, preferring its enabled copy. */
-  const locate = (name: string) =>
-    Effect.gen(function* () {
+  const locate = Effect.fn("SkillService.locate")(
+    function* (name: string) {
       const enabledPath = path.join(enabledDir, name);
       if (yield* fs.exists(path.join(enabledPath, SKILL_ENTRY_FILE))) {
         return { dir: enabledPath, enabled: true } as const;
@@ -163,23 +159,24 @@ export const make = Effect.gen(function* () {
         return { dir: disabledPath, enabled: false } as const;
       }
       return null;
-    }).pipe(Effect.mapError(ioFailed(`Could not look up skill '${name}'.`)));
+    },
+    (effect, name) => effect.pipe(Effect.mapError(ioFailed(`Could not look up skill '${name}'.`))),
+  );
 
-  const locateCustom = (name: string) =>
-    Effect.gen(function* () {
-      const location = yield* locate(name);
-      if (location === null) return yield* fail("not_found", `Skill '${name}' does not exist.`);
-      const builtin = yield* fs
-        .exists(path.join(location.dir, BUILTIN_SKILL_MARKER))
-        .pipe(Effect.mapError(ioFailed(`Could not look up skill '${name}'.`)));
-      if (builtin) {
-        return yield* fail("builtin", `'${name}' is built in; duplicate it to change it.`);
-      }
-      return location;
-    });
+  const locateCustom = Effect.fn("SkillService.locateCustom")(function* (name: string) {
+    const location = yield* locate(name);
+    if (location === null) return yield* fail("not_found", `Skill '${name}' does not exist.`);
+    const builtin = yield* fs
+      .exists(path.join(location.dir, BUILTIN_SKILL_MARKER))
+      .pipe(Effect.mapError(ioFailed(`Could not look up skill '${name}'.`)));
+    if (builtin) {
+      return yield* fail("builtin", `'${name}' is built in; duplicate it to change it.`);
+    }
+    return location;
+  });
 
-  const list: SkillService["Service"]["list"] = () =>
-    Effect.gen(function* () {
+  const list: SkillService["Service"]["list"] = Effect.fn("SkillService.list")(
+    function* () {
       const skills: Array<Skill> = [];
       for (const [dir, enabled] of [
         [enabledDir, true],
@@ -197,29 +194,30 @@ export const make = Effect.gen(function* () {
         skillsDir: serverConfig.skillsDir,
         skills: skills.toSorted((left, right) => left.name.localeCompare(right.name)),
       };
-    }).pipe(Effect.mapError(ioFailed("Could not list skills.")));
+    },
+    Effect.mapError(ioFailed("Could not list skills.")),
+  );
 
-  const get: SkillService["Service"]["get"] = (input) =>
-    Effect.gen(function* () {
-      const location = yield* locate(input.name);
-      if (location === null) {
-        return yield* fail("not_found", `Skill '${input.name}' does not exist.`);
-      }
-      const { skill, files } = yield* readSkill(location.dir, input.name, location.enabled).pipe(
-        Effect.mapError(ioFailed(`Could not read skill '${input.name}'.`)),
-      );
-      const contents: Array<SkillFile> = [];
-      for (const file of files) {
-        contents.push({
-          path: file.path,
-          executable: file.executable,
-          contents: yield* fs
-            .readFileString(file.absolute)
-            .pipe(Effect.mapError(ioFailed(`Could not read ${file.path}.`))),
-        });
-      }
-      return { skill, files: contents };
-    });
+  const get: SkillService["Service"]["get"] = Effect.fn("SkillService.get")(function* (input) {
+    const location = yield* locate(input.name);
+    if (location === null) {
+      return yield* fail("not_found", `Skill '${input.name}' does not exist.`);
+    }
+    const { skill, files } = yield* readSkill(location.dir, input.name, location.enabled).pipe(
+      Effect.mapError(ioFailed(`Could not read skill '${input.name}'.`)),
+    );
+    const contents: Array<SkillFile> = [];
+    for (const file of files) {
+      contents.push({
+        path: file.path,
+        executable: file.executable,
+        contents: yield* fs
+          .readFileString(file.absolute)
+          .pipe(Effect.mapError(ioFailed(`Could not read ${file.path}.`))),
+      });
+    }
+    return { skill, files: contents };
+  });
 
   const save: SkillService["Service"]["save"] = (input) =>
     mutation.withPermits(1)(
@@ -239,9 +237,7 @@ export const make = Effect.gen(function* () {
           input.name,
         );
 
-        const stagingId = yield* crypto
-          .randomUUIDv4()
-          .pipe(Effect.mapError(ioFailed("Could not generate a staging id.")));
+        const stagingId = yield* random.uuidV4();
         const staged = path.join(stagingDir, `${input.name}-${stagingId}`);
         yield* Effect.gen(function* () {
           for (const file of input.files) {

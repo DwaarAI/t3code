@@ -1,6 +1,7 @@
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import { LegendList } from "@legendapp/list/react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { StackActions, useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useGT, useMessages } from "gt-react-native";
 import { AsyncResult } from "effect/reactivity";
 import { useState } from "react";
 import { Pressable, View } from "react-native";
@@ -9,25 +10,27 @@ import { AppBar } from "../../components/ui/AppBar";
 import { AppText as Text } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { SegmentedControl } from "../../components/ui/SegmentedControl";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { useNavigationThreadShells, useProjects } from "../../state/entities";
-import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
+import { mobilePreferencesAtom, saveMobilePreferences } from "../../state/preferences";
+import { useAtomCommand } from "../../state/use-atom-command";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
-import { useAdaptiveWorkspaceLayout } from "../layout/AdaptiveWorkspaceLayout";
 import { SettingsScreenContent } from "../settings/components/SettingsScreen";
 import {
   buildRecentActivityRows,
-  RECENT_ACTIVITY_SORT_OPTIONS,
+  recentActivitySortOptions,
   type RecentActivityRow,
 } from "./recentActivityRows";
 
 export function RecentActivityRouteScreen() {
+  const gt = useGT();
+  const messages = useMessages();
   const navigation = useNavigation();
-  const { selectThread } = useAdaptiveWorkspaceLayout();
   const threads = useNavigationThreadShells();
   const projects = useProjects();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const preferences = useAtomValue(mobilePreferencesAtom);
-  const savePreferences = useAtomSet(updateMobilePreferencesAtom);
+  const savePreferences = useAtomCommand(saveMobilePreferences);
   const sort = AsyncResult.isSuccess(preferences)
     ? (preferences.value.recentActivitySort ?? "updated")
     : "updated";
@@ -40,7 +43,7 @@ export function RecentActivityRouteScreen() {
     return () => clearInterval(id);
   });
 
-  const rows = buildRecentActivityRows({ threads, projects, sort, nowMs });
+  const rows = buildRecentActivityRows({ threads, projects, sort, nowMs, resolve: messages });
   const showEnvironment = Object.keys(savedConnectionsById).length > 1;
 
   const renderItem = ({ item }: { readonly item: RecentActivityRow }) => (
@@ -52,13 +55,20 @@ export function RecentActivityRouteScreen() {
           ? (savedConnectionsById[item.thread.environmentId]?.environmentLabel ?? null)
           : null
       }
-      onPress={() => selectThread(item.thread)}
+      onPress={() =>
+        navigation.dispatch(
+          StackActions.push("Thread", {
+            environmentId: item.thread.environmentId,
+            threadId: item.thread.id,
+          }),
+        )
+      }
     />
   );
 
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
-      <AppBar title="Recent activity" sidebar={false} onBack={() => navigation.goBack()} />
+      <AppBar title={gt("Recent activity")} onBack={() => navigation.goBack()} />
       <SettingsScreenContent>
         <LegendList
           className="flex-1"
@@ -66,19 +76,20 @@ export function RecentActivityRouteScreen() {
           contentInsetAdjustmentBehavior="automatic"
           data={rows}
           estimatedItemSize={76}
+          renderScrollComponent={NativeScrollView}
           keyExtractor={(item) => item.key}
           ListHeaderComponent={
             <SegmentedControl
               className="mb-3"
-              options={RECENT_ACTIVITY_SORT_OPTIONS}
+              options={recentActivitySortOptions(messages)}
               selected={sort}
-              onSelect={(recentActivitySort) => savePreferences({ recentActivitySort })}
+              onSelect={(recentActivitySort) => void savePreferences({ recentActivitySort })}
             />
           }
           ListEmptyComponent={
             <EmptyState
-              title="No recent threads"
-              detail="Threads you open appear here."
+              title={gt("No recent threads")}
+              detail={gt("Threads you open appear here.")}
               variant="plain"
             />
           }
@@ -96,13 +107,14 @@ function RecentActivityRowView(props: {
   readonly environmentLabel: string | null;
   readonly onPress: () => void;
 }) {
+  const gt = useGT();
   const { thread, projectTitle, times } = props.row;
   const context = [projectTitle, props.environmentLabel].filter(Boolean).join(" · ");
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open thread ${thread.title}`}
+      accessibilityLabel={gt("Open thread {title}", { title: thread.title })}
       accessibilityHint={times.map((time) => `${time.label} ${time.age}`).join(", ")}
       className="mb-2 gap-1 rounded-[20px] bg-card px-4 py-3 active:opacity-70"
       onPress={props.onPress}

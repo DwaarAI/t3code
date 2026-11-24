@@ -1,11 +1,7 @@
 /**
- * FolderIssueSync - Turns labeled GitHub issues into folders and moves issue
- * status labels as a folder's pull requests open and merge.
- *
- * Off unless the `githubIssueFolders` setting is on. It polls with the
- * server's `gh` login, so it needs no public URL or webhook. It never starts an
- * agent: a folder waits with the issue snapshot and a suggested first prompt
- * until someone opens it in T3 Code.
+ * Turns labeled GitHub issues into folders and moves status labels as their PRs open and
+ * merge. Off unless `githubIssueFolders` is on; polls with the server's `gh` login, so no
+ * webhook is needed. It never starts an agent: the folder waits until someone opens it.
  */
 import type { Folder, OrchestrationProjectShell } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -40,13 +36,13 @@ export const makeSyncOnce = Effect.gen(function* () {
   // label instead, so adding it again retries them.
   const skipped = new Set<string>();
 
-  const startFolder = (input: {
-    readonly repository: string;
-    readonly issue: FolderGitHub.LabeledIssue;
-    readonly label: string;
-    readonly projectsByRepository: ReadonlyMap<string, OrchestrationProjectShell>;
-  }) =>
-    Effect.gen(function* () {
+  const startFolder = Effect.fn("FolderIssueSync.startFolder")(
+    function* (input: {
+      readonly repository: string;
+      readonly issue: FolderGitHub.LabeledIssue;
+      readonly label: string;
+      readonly projectsByRepository: ReadonlyMap<string, OrchestrationProjectShell>;
+    }) {
       const { repository, issue, label } = input;
       const key: IssueKey = { repository, number: issue.number };
       if (!issue.author || !(yield* github.canWrite(repository, issue.author))) {
@@ -86,30 +82,33 @@ export const makeSyncOnce = Effect.gen(function* () {
       });
       yield* github.ensureLabel(repository, `${label}:active`, "1d76db");
       yield* github.editLabels(key, { add: [`${label}:active`], remove: [label] });
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.gen(function* () {
-          const detail = typeof error === "string" ? error : error.message;
-          yield* Effect.logWarning(`Could not create a folder for ${input.issue.url}: ${detail}`);
-          const key = { repository: input.repository, number: input.issue.number };
-          yield* github
-            .comment(key, `T3 Code could not create a folder for this issue: ${detail}`)
-            .pipe(
-              Effect.andThen(
-                github.ensureLabel(input.repository, `${input.label}:error`, "d93f0b"),
-              ),
-              Effect.andThen(
-                github.editLabels(key, { add: [`${input.label}:error`], remove: [input.label] }),
-              ),
-              Effect.catch(() => Effect.sync(() => skipped.add(issueKeyOf(key)))),
-            );
-        }),
+    },
+    (effect, input) =>
+      effect.pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            const detail = typeof error === "string" ? error : error.message;
+            yield* Effect.logWarning(`Could not create a folder for ${input.issue.url}: ${detail}`);
+            const key = { repository: input.repository, number: input.issue.number };
+            yield* github
+              .comment(key, `T3 Code could not create a folder for this issue: ${detail}`)
+              .pipe(
+                Effect.andThen(
+                  github.ensureLabel(input.repository, `${input.label}:error`, "d93f0b"),
+                ),
+                Effect.andThen(
+                  github.editLabels(key, { add: [`${input.label}:error`], remove: [input.label] }),
+                ),
+                Effect.catch(() => Effect.sync(() => skipped.add(issueKeyOf(key)))),
+              );
+          }),
+        ),
       ),
-    );
+  );
 
   /** Move linked issues forward as the folder's pull requests open and merge. */
-  const advanceStatus = (folder: Folder, repositoryByProject: ReadonlyMap<string, string>) =>
-    Effect.gen(function* () {
+  const advanceStatus = Effect.fn("FolderIssueSync.advanceStatus")(
+    function* (folder: Folder, repositoryByProject: ReadonlyMap<string, string>) {
       const issue = folder.issue;
       if (!issue || folder.archivedAt !== null || issue.status === "done") return;
       const states: string[] = [];
@@ -120,11 +119,14 @@ export const makeSyncOnce = Effect.gen(function* () {
       }
       const next = nextAutomaticStatus(issue.status, states);
       if (next !== null) yield* folders.setIssueStatus({ slug: folder.slug, status: next });
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning(`Could not update the issue status for folder ${folder.slug}`, error),
+    },
+    (effect, folder) =>
+      effect.pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(`Could not update the issue status for folder ${folder.slug}`, error),
+        ),
       ),
-    );
+  );
 
   return Effect.gen(function* () {
     const current = yield* settings.getSettings;

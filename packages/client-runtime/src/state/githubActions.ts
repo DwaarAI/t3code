@@ -6,7 +6,7 @@ import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { createEnvironmentRpcCommand, createEnvironmentRpcQueryAtomFamily } from "./runtime.ts";
 
 /** How often an open Actions view re-reads the branch's runs. */
-export const GITHUB_ACTIONS_REFRESH_INTERVAL_MS = 15_000;
+const GITHUB_ACTIONS_REFRESH_INTERVAL_MS = 15_000;
 
 /**
  * A branch's GitHub Actions runs and manual workflows. Polled only while a
