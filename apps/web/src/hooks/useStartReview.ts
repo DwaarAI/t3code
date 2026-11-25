@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { findFolderForThread } from "@t3tools/client-runtime/state/folders";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
@@ -67,8 +69,10 @@ export function useStartReview() {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: "Reviews need an updated server",
-          description: `This environment does not provide the ${REVIEW_SKILL} skill yet.`,
+          title: m(msg("Reviews need an updated server")),
+          description: m(msg("This environment does not provide the {skill} skill yet."), {
+            skill: REVIEW_SKILL,
+          }),
         }),
       );
       return;
@@ -91,8 +95,10 @@ export function useStartReview() {
     } else {
       toastManager.add({
         type: "info",
-        title: "Codex is not available here",
-        description: "The review draft keeps the current provider; pick another before sending.",
+        title: m(msg("Codex is not available here")),
+        description: m(
+          msg("The review draft keeps the current provider; pick another before sending."),
+        ),
       });
     }
 

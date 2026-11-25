@@ -1,10 +1,7 @@
 /**
- * FolderService - Creates and maintains feature folders on disk.
- *
- * A folder is `<foldersDir>/<slug>/` with a `folder.json` manifest, a shared
- * `.context/` directory, and one git worktree per member repository. The
- * manifest is the source of truth; threads join a folder by running in one of
- * its worktrees, so the orchestration model needs no folder aggregate.
+ * A folder is `<foldersDir>/<slug>/`: a `folder.json` manifest (the source of truth),
+ * a shared `.context/`, and one git worktree per member repository. Threads join a
+ * folder by running in one of its worktrees, so orchestration needs no folder aggregate.
  */
 import {
   CommandId,
@@ -28,7 +25,7 @@ import {
 } from "@t3tools/contracts";
 import { fromJsonStringPretty, fromLenientJson } from "@t3tools/shared/schemaJson";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -101,11 +98,11 @@ const ioFailed = (detail: string) => (cause: unknown) =>
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
-/** @public Service construction is part of the canonical Effect module API. */
+/** @public */
 export const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const random = yield* SecureRandom.SecureRandom;
   const serverConfig = yield* ServerConfig.ServerConfig;
   const gitWorkflow = yield* GitWorkflowService.GitWorkflowService;
   const gitDriver = yield* GitVcsDriver.GitVcsDriver;
@@ -117,7 +114,7 @@ export const make = Effect.gen(function* () {
   // Manifest writes read-modify-write the file, so mutations run one at a time.
   const mutation = yield* Semaphore.make(1);
 
-  const newId = crypto.randomUUIDv4().pipe(Effect.mapError(ioFailed("Could not generate an id.")));
+  const newId = random.uuidV4();
   const folderDirFor = (slug: string) => path.join(foldersDir, slug);
   const manifestPathFor = (slug: string) => path.join(folderDirFor(slug), FOLDER_MANIFEST_FILE);
   const toFolder = (manifest: FolderManifest): Folder => ({
@@ -132,19 +129,18 @@ export const make = Effect.gen(function* () {
     .makeDirectory(guidesDir, { recursive: true })
     .pipe(Effect.mapError(ioFailed(`Could not create the guides directory at ${guidesDir}.`)));
 
-  const readManifest = (slug: string) =>
-    Effect.gen(function* () {
-      const manifestPath = manifestPathFor(slug);
-      if (!(yield* fs.exists(manifestPath).pipe(Effect.orElseSucceed(() => false)))) {
-        return yield* fail("not_found", `Folder '${slug}' does not exist.`);
-      }
-      const raw = yield* fs
-        .readFileString(manifestPath)
-        .pipe(Effect.mapError(ioFailed(`Could not read ${manifestPath}.`)));
-      return yield* decodeManifest(raw).pipe(
-        Effect.mapError(ioFailed(`${manifestPath} is not a valid folder manifest.`)),
-      );
-    });
+  const readManifest = Effect.fn("FolderService.readManifest")(function* (slug: string) {
+    const manifestPath = manifestPathFor(slug);
+    if (!(yield* fs.exists(manifestPath).pipe(Effect.orElseSucceed(() => false)))) {
+      return yield* fail("not_found", `Folder '${slug}' does not exist.`);
+    }
+    const raw = yield* fs
+      .readFileString(manifestPath)
+      .pipe(Effect.mapError(ioFailed(`Could not read ${manifestPath}.`)));
+    return yield* decodeManifest(raw).pipe(
+      Effect.mapError(ioFailed(`${manifestPath} is not a valid folder manifest.`)),
+    );
+  });
 
   const writeManifest = (manifest: FolderManifest) =>
     encodeManifest(manifest).pipe(
@@ -180,8 +176,8 @@ export const make = Effect.gen(function* () {
    * checkout is behind. The checkout itself is left alone. Falls back to the
    * local branch when there is no origin, the fetch fails, or origin lacks it.
    */
-  const resolveBaseRef = (projectRoot: string, baseBranch: string) =>
-    Effect.gen(function* () {
+  const resolveBaseRef = Effect.fn("FolderService.resolveBaseRef")(
+    function* (projectRoot: string, baseBranch: string) {
       const local = { ref: baseBranch, label: baseBranch };
       const hasOrigin = yield* gitWorkflow.remoteExists({ cwd: projectRoot, remoteName: "origin" });
       if (!hasOrigin) return local;
@@ -205,60 +201,62 @@ export const make = Effect.gen(function* () {
         ref: remote.commitSha,
         label: `${remote.remoteRefName}@${remote.commitSha.slice(0, 7)}`,
       };
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning(
-          `Could not fetch ${baseBranch} for ${projectRoot}; branching from the local branch.`,
-          error,
-        ).pipe(Effect.as({ ref: baseBranch, label: baseBranch })),
+    },
+    (effect, projectRoot, baseBranch) =>
+      effect.pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(
+            `Could not fetch ${baseBranch} for ${projectRoot}; branching from the local branch.`,
+            error,
+          ).pipe(Effect.as({ ref: baseBranch, label: baseBranch })),
+        ),
       ),
-    );
+  );
 
   /**
    * Check out `branch` at `worktreePath`, creating the branch from the latest
    * base when missing. Returns what a new branch started from, or null.
    */
-  const checkOutWorktree = (input: {
+  const checkOutWorktree = Effect.fn("FolderService.checkOutWorktree")(function* (input: {
     readonly projectRoot: string;
     readonly branch: string;
     readonly baseBranch: string;
     readonly worktreePath: string;
-  }) =>
-    Effect.gen(function* () {
-      const branchExists = yield* gitWorkflow.hasCommit({
-        cwd: input.projectRoot,
-        refName: `refs/heads/${input.branch}`,
-      });
-      if (branchExists) {
-        yield* gitWorkflow.createWorktree({
-          cwd: input.projectRoot,
-          refName: input.branch,
-          path: input.worktreePath,
-        });
-        return null;
-      }
-      const base = yield* resolveBaseRef(input.projectRoot, input.baseBranch);
+  }) {
+    const branchExists = yield* gitWorkflow.hasCommit({
+      cwd: input.projectRoot,
+      refName: `refs/heads/${input.branch}`,
+    });
+    if (branchExists) {
       yield* gitWorkflow.createWorktree({
         cwd: input.projectRoot,
-        refName: base.ref,
-        newRefName: input.branch,
-        baseRefName: input.baseBranch,
+        refName: input.branch,
         path: input.worktreePath,
       });
-      return base.label;
-    }).pipe(Effect.mapError(gitFailed));
+      return null;
+    }
+    const base = yield* resolveBaseRef(input.projectRoot, input.baseBranch);
+    yield* gitWorkflow.createWorktree({
+      cwd: input.projectRoot,
+      refName: base.ref,
+      newRefName: input.branch,
+      baseRefName: input.baseBranch,
+      path: input.worktreePath,
+    });
+    return base.label;
+  }, Effect.mapError(gitFailed));
 
   /**
    * Gitignored `.env*` files never reach a new worktree, so copy them from the
    * project's checkout. Best effort: a missing env file must not block the
    * worktree the user asked for.
    */
-  const copyProjectEnvFiles = (input: {
-    readonly projectRoot: string;
-    readonly worktreePath: string;
-    readonly overwrite: boolean;
-  }) =>
-    Effect.gen(function* () {
+  const copyProjectEnvFiles = Effect.fn("FolderService.copyProjectEnvFiles")(
+    function* (input: {
+      readonly projectRoot: string;
+      readonly worktreePath: string;
+      readonly overwrite: boolean;
+    }) {
       const list = (operation: string, args: ReadonlyArray<string>) =>
         gitDriver
           .execute({ operation, cwd: input.projectRoot, args, maxOutputBytes: 8_000_000 })
@@ -291,13 +289,16 @@ export const make = Effect.gen(function* () {
         copied.push(relative);
       }
       return copied;
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning(`Could not copy .env files into ${input.worktreePath}`, error).pipe(
-          Effect.as([] as string[]),
+    },
+    (effect, input) =>
+      effect.pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(`Could not copy .env files into ${input.worktreePath}`, error).pipe(
+            Effect.as([] as string[]),
+          ),
         ),
       ),
-    );
+  );
 
   /**
    * Link `.context` into a worktree so repository sessions reach the shared
@@ -305,8 +306,8 @@ export const make = Effect.gen(function* () {
    * repository's local exclude file. Skipped when the repository already has
    * its own `.context`.
    */
-  const linkContextDir = (worktreePath: string) =>
-    Effect.gen(function* () {
+  const linkContextDir = Effect.fn("FolderService.linkContextDir")(
+    function* (worktreePath: string) {
       const linkPath = path.join(worktreePath, FOLDER_CONTEXT_DIR);
       if (yield* fs.exists(linkPath)) return;
       yield* fs.symlink(path.join("..", FOLDER_CONTEXT_DIR), linkPath);
@@ -327,104 +328,107 @@ export const make = Effect.gen(function* () {
         excludePath,
         `${current}${current === "" || current.endsWith("\n") ? "" : "\n"}/${FOLDER_CONTEXT_DIR}\n`,
       );
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning(`Could not link .context into ${worktreePath}`, error),
+    },
+    (effect, worktreePath) =>
+      effect.pipe(
+        Effect.catch((error) =>
+          Effect.logWarning(`Could not link .context into ${worktreePath}`, error),
+        ),
       ),
-    );
+  );
 
   /** Worktree plus the default setup every new worktree gets. */
-  const prepareWorktree = (input: {
+  const prepareWorktree = Effect.fn("FolderService.prepareWorktree")(function* (input: {
     readonly projectRoot: string;
     readonly branch: string;
     readonly baseBranch: string;
     readonly worktreePath: string;
-  }) =>
-    Effect.gen(function* () {
-      const baseRef = yield* checkOutWorktree(input);
-      yield* linkContextDir(input.worktreePath);
-      const envFiles = yield* copyProjectEnvFiles({
-        projectRoot: input.projectRoot,
-        worktreePath: input.worktreePath,
-        overwrite: false,
-      });
-      return { baseRef, envFiles, at: yield* nowIso } satisfies FolderMemberSetup;
+  }) {
+    const baseRef = yield* checkOutWorktree(input);
+    yield* linkContextDir(input.worktreePath);
+    const envFiles = yield* copyProjectEnvFiles({
+      projectRoot: input.projectRoot,
+      worktreePath: input.worktreePath,
+      overwrite: false,
     });
+    return { baseRef, envFiles, at: yield* nowIso } satisfies FolderMemberSetup;
+  });
 
-  const createMember = (input: {
+  const createMember = Effect.fn("FolderService.createMember")(function* (input: {
     readonly slug: string;
     readonly branch: string;
     readonly member: FolderMemberInput;
     readonly takenRepoNames: ReadonlyArray<string>;
-  }) =>
-    Effect.gen(function* () {
-      const projectRoot = yield* resolveProjectRoot(input.member.projectId);
-      const repoName = uniqueRepoName(path, projectRoot, input.takenRepoNames);
-      const worktreePath = path.join(folderDirFor(input.slug), repoName);
-      const setup = yield* prepareWorktree({
-        projectRoot,
-        branch: input.branch,
-        baseBranch: input.member.baseBranch,
-        worktreePath,
-      });
-      return {
-        projectId: input.member.projectId,
-        repoName,
-        branch: input.branch,
-        baseBranch: input.member.baseBranch,
-        worktreePath,
-        archivedAt: null,
-        setup,
-      } satisfies FolderMember;
+  }) {
+    const projectRoot = yield* resolveProjectRoot(input.member.projectId);
+    const repoName = uniqueRepoName(path, projectRoot, input.takenRepoNames);
+    const worktreePath = path.join(folderDirFor(input.slug), repoName);
+    const setup = yield* prepareWorktree({
+      projectRoot,
+      branch: input.branch,
+      baseBranch: input.member.baseBranch,
+      worktreePath,
     });
+    return {
+      projectId: input.member.projectId,
+      repoName,
+      branch: input.branch,
+      baseBranch: input.member.baseBranch,
+      worktreePath,
+      archivedAt: null,
+      setup,
+    } satisfies FolderMember;
+  });
 
-  const removeMemberWorktree = (member: FolderMember, force: boolean) =>
-    Effect.gen(function* () {
-      if (!force) {
-        // Asked explicitly: git's own refusal reaches us without its reason.
-        // A worktree that is already gone has nothing to lose.
-        const dirty = yield* gitDriver.statusDetailsLocal(member.worktreePath).pipe(
-          Effect.map((status) => status.hasWorkingTreeChanges),
-          Effect.orElseSucceed(() => false),
-        );
-        if (dirty) {
-          return yield* fail(
-            "dirty_worktree",
-            `${member.repoName} has uncommitted changes. Commit them, or archive with force to discard them.`,
-          );
-        }
-      }
-      // A project removed from T3 Code leaves its folders behind. Without the
-      // repository git cannot retire the worktree, so drop the directory and
-      // leave the stale record for `git worktree prune`; otherwise the folder
-      // could never be archived or deleted.
-      const projectRoot = yield* resolveProjectRoot(member.projectId).pipe(
-        Effect.map((root): string | null => root),
-        Effect.catchIf(
-          (error) => error.reason === "project_not_found",
-          () => Effect.succeed(null),
-        ),
+  const removeMemberWorktree = Effect.fn("FolderService.removeMemberWorktree")(function* (
+    member: FolderMember,
+    force: boolean,
+  ) {
+    if (!force) {
+      // Asked explicitly: git's own refusal reaches us without its reason.
+      // A worktree that is already gone has nothing to lose.
+      const dirty = yield* gitDriver.statusDetailsLocal(member.worktreePath).pipe(
+        Effect.map((status) => status.hasWorkingTreeChanges),
+        Effect.orElseSucceed(() => false),
       );
-      if (projectRoot === null) {
-        yield* Effect.logInfo(
-          `Project ${member.projectId} is gone; removing ${member.worktreePath} directly.`,
+      if (dirty) {
+        return yield* fail(
+          "dirty_worktree",
+          `${member.repoName} has uncommitted changes. Commit them, or archive with force to discard them.`,
         );
-        yield* fs.remove(member.worktreePath, { recursive: true }).pipe(Effect.ignore);
-        return;
       }
-      yield* gitWorkflow
-        .removeWorktree({ cwd: projectRoot, path: member.worktreePath, force })
-        .pipe(Effect.mapError(gitFailed));
-    });
+    }
+    // A project removed from T3 Code leaves its folders behind. Without the
+    // repository git cannot retire the worktree, so drop the directory and
+    // leave the stale record for `git worktree prune`; otherwise the folder
+    // could never be archived or deleted.
+    const projectRoot = yield* resolveProjectRoot(member.projectId).pipe(
+      Effect.map((root): string | null => root),
+      Effect.catchIf(
+        (error) => error.reason === "project_not_found",
+        () => Effect.succeed(null),
+      ),
+    );
+    if (projectRoot === null) {
+      yield* Effect.logInfo(
+        `Project ${member.projectId} is gone; removing ${member.worktreePath} directly.`,
+      );
+      yield* fs.remove(member.worktreePath, { recursive: true }).pipe(Effect.ignore);
+      return;
+    }
+    yield* gitWorkflow
+      .removeWorktree({ cwd: projectRoot, path: member.worktreePath, force })
+      .pipe(Effect.mapError(gitFailed));
+  });
 
   /** Settle the worktree's live threads so they leave active lists everywhere. */
-  const settleThreadsWhere = (
-    belongs: (thread: {
-      readonly worktreePath: string | null;
-      readonly projectId: string;
-    }) => boolean,
-  ) =>
-    Effect.gen(function* () {
+  const settleThreadsWhere = Effect.fn("FolderService.settleThreadsWhere")(
+    function* (
+      belongs: (thread: {
+        readonly worktreePath: string | null;
+        readonly projectId: string;
+      }) => boolean,
+    ) {
       const snapshot = yield* threadManagement.getShellSnapshot();
       const threads = snapshot.threads.filter(
         (thread) =>
@@ -434,19 +438,19 @@ export const make = Effect.gen(function* () {
           thread.deletedAt === null,
       );
       for (const thread of threads) {
-        const uuid = yield* crypto.randomUUIDv4();
+        const uuid = yield* random.uuidV4();
         yield* threadManagement.settleThread({
           threadId: thread.id,
           commandId: CommandId.make(`server:folder-archive:${uuid}`),
           byOwnAgent: false,
         });
       }
-    }).pipe(
-      // Settling is housekeeping; the worktree is already gone.
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Could not settle threads of an archived folder worktree", cause),
-      ),
-    );
+    },
+    // Settling is housekeeping; the worktree is already gone.
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Could not settle threads of an archived folder worktree", cause),
+    ),
+  );
 
   const settleMemberThreads = (member: FolderMember) =>
     settleThreadsWhere((thread) => thread.worktreePath === member.worktreePath);
@@ -473,71 +477,73 @@ export const make = Effect.gen(function* () {
     ),
   });
 
-  const archiveActiveMember = (member: FolderMember, force: boolean) =>
-    Effect.gen(function* () {
-      if (member.archivedAt !== null) return member;
-      yield* removeMemberWorktree(member, force);
-      yield* settleMemberThreads(member);
-      return { ...member, archivedAt: yield* nowIso };
-    });
+  const archiveActiveMember = Effect.fn("FolderService.archiveActiveMember")(function* (
+    member: FolderMember,
+    force: boolean,
+  ) {
+    if (member.archivedAt !== null) return member;
+    yield* removeMemberWorktree(member, force);
+    yield* settleMemberThreads(member);
+    return { ...member, archivedAt: yield* nowIso };
+  });
 
-  const restoreArchivedMember = (member: FolderMember) =>
-    Effect.gen(function* () {
-      if (member.archivedAt === null) return member;
-      // A member whose project is gone stays archived rather than failing the
-      // whole folder; adding the project back makes it restorable again.
-      const projectRoot = yield* resolveProjectRoot(member.projectId).pipe(
-        Effect.map((root): string | null => root),
-        Effect.catchIf(
-          (error) => error.reason === "project_not_found",
-          () =>
-            Effect.logWarning(
-              `Cannot restore ${member.repoName}: project ${member.projectId} is gone.`,
-            ).pipe(Effect.as(null)),
+  const restoreArchivedMember = Effect.fn("FolderService.restoreArchivedMember")(function* (
+    member: FolderMember,
+  ) {
+    if (member.archivedAt === null) return member;
+    // A member whose project is gone stays archived rather than failing the
+    // whole folder; adding the project back makes it restorable again.
+    const projectRoot = yield* resolveProjectRoot(member.projectId).pipe(
+      Effect.map((root): string | null => root),
+      Effect.catchIf(
+        (error) => error.reason === "project_not_found",
+        () =>
+          Effect.logWarning(
+            `Cannot restore ${member.repoName}: project ${member.projectId} is gone.`,
+          ).pipe(Effect.as(null)),
+      ),
+    );
+    if (projectRoot === null) return member;
+    const setup = yield* prepareWorktree({
+      projectRoot,
+      branch: member.branch,
+      baseBranch: member.baseBranch,
+      worktreePath: member.worktreePath,
+    });
+    return { ...member, archivedAt: null, setup };
+  });
+
+  const list: FolderService["Service"]["list"] = Effect.fn("FolderService.list")(function* () {
+    yield* ensureGuidesDir;
+    const entries = yield* fs
+      .readDirectory(foldersDir)
+      .pipe(Effect.orElseSucceed(() => [] as string[]));
+    const folders: Folder[] = [];
+    for (const slug of entries) {
+      const manifest = yield* readManifest(slug).pipe(
+        Effect.asSome,
+        Effect.catch((error) =>
+          error.reason === "not_found"
+            ? Effect.succeed(Option.none<FolderManifest>())
+            : Effect.logWarning(error.detail).pipe(Effect.as(Option.none<FolderManifest>())),
         ),
       );
-      if (projectRoot === null) return member;
-      const setup = yield* prepareWorktree({
-        projectRoot,
-        branch: member.branch,
-        baseBranch: member.baseBranch,
-        worktreePath: member.worktreePath,
-      });
-      return { ...member, archivedAt: null, setup };
-    });
-
-  const list: FolderService["Service"]["list"] = () =>
-    Effect.gen(function* () {
-      yield* ensureGuidesDir;
-      const entries = yield* fs
-        .readDirectory(foldersDir)
-        .pipe(Effect.orElseSucceed(() => [] as string[]));
-      const folders: Folder[] = [];
-      for (const slug of entries) {
-        const manifest = yield* readManifest(slug).pipe(
-          Effect.map(Option.some),
-          Effect.catch((error) =>
-            error.reason === "not_found"
-              ? Effect.succeed(Option.none<FolderManifest>())
-              : Effect.logWarning(error.detail).pipe(Effect.as(Option.none<FolderManifest>())),
-          ),
-        );
-        if (Option.isSome(manifest)) folders.push(toFolder(manifest.value));
-      }
-      // Worktrees made before `.context` was linked, or whose link was
-      // deleted, get it back. Only a missing link costs any work.
-      for (const folder of folders) {
-        for (const member of folder.members) {
-          if (member.archivedAt !== null) continue;
-          if (!(yield* fs.exists(member.worktreePath).pipe(Effect.orElseSucceed(() => false)))) {
-            continue;
-          }
-          yield* linkContextDir(member.worktreePath);
+      if (Option.isSome(manifest)) folders.push(toFolder(manifest.value));
+    }
+    // Worktrees made before `.context` was linked, or whose link was
+    // deleted, get it back. Only a missing link costs any work.
+    for (const folder of folders) {
+      for (const member of folder.members) {
+        if (member.archivedAt !== null) continue;
+        if (!(yield* fs.exists(member.worktreePath).pipe(Effect.orElseSucceed(() => false)))) {
+          continue;
         }
+        yield* linkContextDir(member.worktreePath);
       }
-      folders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      return { foldersDir, guidesDir, folders };
-    });
+    }
+    folders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { foldersDir, guidesDir, folders };
+  });
 
   const create: FolderService["Service"]["create"] = (input) =>
     mutation.withPermits(1)(
@@ -636,8 +642,8 @@ export const make = Effect.gen(function* () {
    * Tell the issue which folder took it and mark it in progress. GitHub being
    * unreachable must not undo a folder that exists on disk, so failures log.
    */
-  const announceOnIssue = (folder: Folder) =>
-    Effect.gen(function* () {
+  const announceOnIssue = Effect.fn("FolderService.announceOnIssue")(
+    function* (folder: Folder) {
       const issue = folder.issue!;
       const rows = folder.members.map(
         (member) => `| ${member.repoName} | \`${member.branch}\` from \`${member.baseBranch}\` |`,
@@ -657,13 +663,16 @@ export const make = Effect.gen(function* () {
       yield* github.setStatus(issue, "in-progress");
       const { path: _path, contextDir: _contextDir, ...manifest } = folder;
       return yield* writeManifest({ ...manifest, issue: { ...issue, status: "in-progress" } });
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.logWarning("Could not update the folder's GitHub issue", error).pipe(
-          Effect.as(folder),
+    },
+    (effect, folder) =>
+      effect.pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("Could not update the folder's GitHub issue", error).pipe(
+            Effect.as(folder),
+          ),
         ),
       ),
-    );
+  );
 
   const setIssueStatus: FolderService["Service"]["setIssueStatus"] = (input) =>
     mutation.withPermits(1)(
@@ -838,44 +847,45 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  const writeHandoff: FolderService["Service"]["writeHandoff"] = (input) =>
-    Effect.gen(function* () {
-      const records = yield* threadManagement
-        .getThreadRecords(input.threadId, ["messages", "plans"])
-        .pipe(Effect.mapError(ioFailed("Could not read the thread.")));
-      const thread = records.thread;
-      if (thread.deletedAt !== null) {
-        return yield* fail("not_found", `Thread '${input.threadId}' was not found.`);
-      }
-      const cwd = thread.worktreePath ?? (yield* resolveProjectRoot(thread.projectId));
-      const scope = resolveFolderScope(cwd, foldersDir);
-      if (scope === null) {
-        return yield* fail("not_in_folder", "Handoffs are available for threads in a folder.");
-      }
-      const manifest = yield* readManifest(scope.slug);
-      const writtenAt = yield* nowIso;
-      const filePath = path.join(
-        scope.contextDir,
-        "handoffs",
-        handoffFileName(thread.title, writtenAt),
-      );
-      const contents = buildHandoffMarkdown({
-        thread,
-        messages: records.messages,
-        plans: records.plans,
-        folderName: manifest.name,
-        member:
-          manifest.members.find((member) => member.worktreePath === thread.worktreePath) ?? null,
-        writtenAt,
-      });
-      yield* fs
-        .makeDirectory(path.dirname(filePath), { recursive: true })
-        .pipe(
-          Effect.andThen(fs.writeFileString(filePath, contents)),
-          Effect.mapError(ioFailed(`Could not write ${filePath}.`)),
-        );
-      return { path: filePath };
+  const writeHandoff: FolderService["Service"]["writeHandoff"] = Effect.fn(
+    "FolderService.writeHandoff",
+  )(function* (input) {
+    const records = yield* threadManagement
+      .getThreadRecords(input.threadId, ["messages", "plans"])
+      .pipe(Effect.mapError(ioFailed("Could not read the thread.")));
+    const thread = records.thread;
+    if (thread.deletedAt !== null) {
+      return yield* fail("not_found", `Thread '${input.threadId}' was not found.`);
+    }
+    const cwd = thread.worktreePath ?? (yield* resolveProjectRoot(thread.projectId));
+    const scope = resolveFolderScope(cwd, foldersDir);
+    if (scope === null) {
+      return yield* fail("not_in_folder", "Handoffs are available for threads in a folder.");
+    }
+    const manifest = yield* readManifest(scope.slug);
+    const writtenAt = yield* nowIso;
+    const filePath = path.join(
+      scope.contextDir,
+      "handoffs",
+      handoffFileName(thread.title, writtenAt),
+    );
+    const contents = buildHandoffMarkdown({
+      thread,
+      messages: records.messages,
+      plans: records.plans,
+      folderName: manifest.name,
+      member:
+        manifest.members.find((member) => member.worktreePath === thread.worktreePath) ?? null,
+      writtenAt,
     });
+    yield* fs
+      .makeDirectory(path.dirname(filePath), { recursive: true })
+      .pipe(
+        Effect.andThen(fs.writeFileString(filePath, contents)),
+        Effect.mapError(ioFailed(`Could not write ${filePath}.`)),
+      );
+    return { path: filePath };
+  });
 
   const attachJiraIssue: FolderService["Service"]["attachJiraIssue"] = (input) =>
     mutation.withPermits(1)(

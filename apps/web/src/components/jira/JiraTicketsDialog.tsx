@@ -16,6 +16,7 @@ import type {
   JiraStatusCategory,
 } from "@t3tools/contracts";
 import { ChevronDownIcon, ExternalLinkIcon, PlusIcon, XIcon } from "lucide-react";
+import { T, useGT, useMessages, Var } from "gt-react";
 import { useEffect, useId, useState } from "react";
 import { create } from "zustand";
 
@@ -53,6 +54,7 @@ function close() {
 
 export function JiraTicketsDialogHost() {
   const request = useRequest((state) => state.request);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears the module-level dialog request when the host unmounts, so a remount does not reopen it
   useEffect(() => () => close(), []);
   return request ? <JiraTicketsDialog {...request} /> : null;
 }
@@ -104,6 +106,7 @@ function TicketRow(props: {
 }
 
 function JiraTicketsDialog({ environmentId, slug }: Request) {
+  const gt = useGT();
   const folder = useFoldersForEnvironment(environmentId)?.folders.find(
     (entry) => entry.slug === slug,
   );
@@ -146,12 +149,16 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
     >
       <DialogPopup className="h-[min(85vh,52rem)] sm:max-w-5xl">
         <DialogHeader>
-          <DialogTitle>Jira tickets{folder ? ` · ${folder.name}` : ""}</DialogTitle>
+          <DialogTitle>
+            {folder ? gt("Jira tickets · {name}", { name: folder.name }) : gt("Jira tickets")}
+          </DialogTitle>
         </DialogHeader>
         {status.data && !status.data.configured ? (
           <p className="px-6 pb-6 text-sm text-muted-foreground">
-            Connect Jira in Settings → Source control first. Tickets are read with the server's Jira
-            login.
+            <T>
+              Connect Jira in Settings → Source control first. Tickets are read with the server's
+              Jira login.
+            </T>
           </p>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col border-t sm:flex-row">
@@ -166,15 +173,15 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                 <Input
                   size="sm"
                   value={search}
-                  placeholder="Attach: key, text, or JQL"
-                  aria-label="Search Jira"
+                  placeholder={gt("Attach: key, text, or JQL")}
+                  aria-label={gt("Search Jira")}
                   onChange={(event) => {
                     setSearch(event.target.value);
                     if (event.target.value.trim() === "") setSubmitted("");
                   }}
                 />
                 <Button type="submit" size="sm" variant="outline" disabled={!search.trim()}>
-                  Search
+                  <T context="button, run a search">Search</T>
                 </Button>
               </form>
               <ScrollArea className="min-h-0 flex-1">
@@ -183,8 +190,11 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                     <>
                       <p className="px-2 pt-1 text-xs text-muted-foreground">
                         {results.isPending && !results.data
-                          ? "Searching…"
-                          : (results.error ?? `${results.data?.issues.length ?? 0} results`)}
+                          ? gt("Searching…")
+                          : (results.error ??
+                            gt("{count, plural, one {{count} result} other {{count} results}}", {
+                              count: results.data?.issues.length ?? 0,
+                            }))}
                       </p>
                       {(results.data?.issues ?? []).map((issue) => (
                         <TicketRow
@@ -194,7 +204,9 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                           onSelect={() => setSelected(issue.key)}
                           action={
                             keys.includes(issue.key) ? (
-                              <span className="text-xs text-muted-foreground">Attached</span>
+                              <span className="text-xs text-muted-foreground">
+                                <T context="ticket is attached to the folder">Attached</T>
+                              </span>
                             ) : (
                               <Button
                                 size="xs"
@@ -202,7 +214,7 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                                 onClick={() => void attachKey(issue.key)}
                               >
                                 <PlusIcon />
-                                Attach
+                                <T context="button, attach a ticket">Attach</T>
                               </Button>
                             )
                           }
@@ -216,13 +228,15 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                           setSubmitted("");
                         }}
                       >
-                        Clear search
+                        <T>Clear search</T>
                       </Button>
                     </>
                   ) : keys.length === 0 ? (
                     <p className="px-2 py-1 text-xs text-muted-foreground">
-                      No tickets attached yet. Search above to attach one; its sub-tickets come with
-                      it.
+                      <T>
+                        No tickets attached yet. Search above to attach one; its sub-tickets come
+                        with it.
+                      </T>
                     </p>
                   ) : (
                     <>
@@ -244,14 +258,16 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                                   <Button
                                     size="icon-xs"
                                     variant="ghost"
-                                    aria-label={`Detach ${issue.key}`}
+                                    aria-label={gt("Detach {key}", { key: issue.key })}
                                     onClick={() => void detachKey(issue.key)}
                                   />
                                 }
                               >
                                 <XIcon />
                               </TooltipTrigger>
-                              <TooltipPopup side="top">Detach from folder</TooltipPopup>
+                              <TooltipPopup side="top">
+                                <T>Detach from folder</T>
+                              </TooltipPopup>
                             </Tooltip>
                           }
                         />
@@ -273,7 +289,7 @@ function JiraTicketsDialog({ environmentId, slug }: Request) {
                 />
               ) : (
                 <p className="m-auto p-6 text-sm text-muted-foreground">
-                  Select a ticket to read and edit it.
+                  <T>Select a ticket to read and edit it.</T>
                 </p>
               )}
             </div>
@@ -292,6 +308,7 @@ function TicketDetail(props: {
   onAttach: () => void;
 }) {
   const { environmentId, issueKey } = props;
+  const gt = useGT();
   const query = useEnvironmentQuery(
     jiraEnvironment.issue({ environmentId, input: { key: issueKey } }),
   );
@@ -299,7 +316,7 @@ function TicketDetail(props: {
   if (!issue) {
     return (
       <p className="m-auto p-6 text-sm text-muted-foreground">
-        {query.error ?? `Loading ${issueKey}…`}
+        {query.error ?? gt("Loading {key}…", { key: issueKey })}
       </p>
     );
   }
@@ -316,7 +333,7 @@ function TicketDetail(props: {
         {issue.children.length > 0 ? (
           <section className="flex flex-col gap-1">
             <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Sub-tickets
+              <T>Sub-tickets</T>
             </h3>
             {issue.children.map((child) => (
               <TicketRow key={child.key} issue={child} onSelect={() => props.onSelect(child.key)} />
@@ -336,6 +353,8 @@ function TicketHeader(props: {
   onAttach: () => void;
 }) {
   const { issue, environmentId } = props;
+  const gt = useGT();
+  const messages = useMessages();
   const id = useId();
   const update = useAtomCommand(jiraEnvironment.updateIssue);
   const transition = useAtomCommand(jiraEnvironment.transition);
@@ -361,7 +380,7 @@ function TicketHeader(props: {
     });
     setSaving(false);
     if (result._tag === "Success")
-      toastManager.add({ type: "success", title: `Saved ${issue.key}` });
+      toastManager.add({ type: "success", title: gt("Saved {key}", { key: issue.key }) });
   };
 
   return (
@@ -379,23 +398,31 @@ function TicketHeader(props: {
         <span className="text-muted-foreground">· {issue.issueType}</span>
         {issue.priority ? <span className="text-muted-foreground">· {issue.priority}</span> : null}
         {issue.parentKey ? (
-          <span className="text-muted-foreground">· parent {issue.parentKey}</span>
+          <span className="text-muted-foreground">
+            <T>
+              · parent <Var>{issue.parentKey}</Var>
+            </T>
+          </span>
         ) : null}
         <span className="ml-auto flex items-center gap-2">
           {props.attached ? null : (
             <Button size="xs" variant="outline" onClick={props.onAttach}>
               <PlusIcon />
-              Attach to folder
+              <T>Attach to folder</T>
             </Button>
           )}
           <Menu>
-            <MenuTrigger render={<Button size="xs" variant="outline" aria-label="Change status" />}>
+            <MenuTrigger
+              render={<Button size="xs" variant="outline" aria-label={gt("Change status")} />}
+            >
               {issue.status}
               <ChevronDownIcon />
             </MenuTrigger>
             <MenuPopup align="end">
               {issue.transitions.length === 0 ? (
-                <MenuItem disabled>No status changes available</MenuItem>
+                <MenuItem disabled>
+                  <T>No status changes available</T>
+                </MenuItem>
               ) : (
                 issue.transitions.map((entry) => (
                   <MenuItem
@@ -426,27 +453,39 @@ function TicketHeader(props: {
       >
         <Input
           id={`${id}-summary`}
-          aria-label="Summary"
+          aria-label={gt("Summary", { $context: "Jira ticket title field" })}
           value={summary}
           onChange={(event) => setSummary(event.target.value)}
         />
         <div className="flex items-center gap-2">
           <Input
             size="sm"
-            aria-label="Labels"
-            placeholder="Labels, comma separated"
+            aria-label={gt("Labels")}
+            placeholder={gt("Labels, comma separated")}
             value={labels}
             onChange={(event) => setLabels(event.target.value)}
           />
           <Button type="submit" size="sm" disabled={!changed || !summary.trim() || saving}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? gt("Saving…") : gt("Save")}
           </Button>
         </div>
       </form>
       <p className="text-xs text-muted-foreground">
-        {issue.assignee ? `Assigned to ${issue.assignee.displayName}` : "Unassigned"}
-        {issue.reporter ? ` · reported by ${issue.reporter.displayName}` : ""}
-        {issue.updated ? ` · updated ${formatRelativeTimeLabel(issue.updated)}` : ""}
+        {[
+          issue.assignee
+            ? gt("Assigned to {name}", { name: issue.assignee.displayName })
+            : gt("Unassigned"),
+          ...(issue.reporter
+            ? [gt("reported by {name}", { name: issue.reporter.displayName })]
+            : []),
+          ...(issue.updated
+            ? [
+                gt("updated {time}", {
+                  time: formatRelativeTimeLabel(issue.updated, undefined, messages),
+                }),
+              ]
+            : []),
+        ].join(" · ")}
       </p>
     </section>
   );
@@ -454,6 +493,7 @@ function TicketHeader(props: {
 
 function TicketDescription(props: { issue: JiraIssueDetail; environmentId: EnvironmentId }) {
   const { issue, environmentId } = props;
+  const gt = useGT();
   const update = useAtomCommand(jiraEnvironment.updateIssue);
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -470,11 +510,11 @@ function TicketDescription(props: { issue: JiraIssueDetail; environmentId: Envir
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Description
+          <T>Description</T>
         </h3>
         {draft === null ? (
           <Button size="xs" variant="ghost" onClick={() => setDraft(issue.description)}>
-            Edit
+            <T context="button, edit a description">Edit</T>
           </Button>
         ) : null}
       </div>
@@ -482,26 +522,30 @@ function TicketDescription(props: { issue: JiraIssueDetail; environmentId: Envir
         issue.description ? (
           <ChatMarkdown text={issue.description} cwd={undefined} environmentId={environmentId} />
         ) : (
-          <p className="text-sm text-muted-foreground">No description.</p>
+          <p className="text-sm text-muted-foreground">
+            <T>No description.</T>
+          </p>
         )
       ) : (
         <>
           <Textarea
-            aria-label="Description"
+            aria-label={gt("Description")}
             value={draft}
             rows={12}
             onChange={(event) => setDraft(event.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            Markdown. Headings, lists, quotes, code, bold, italic and links are kept; other Jira
-            formatting such as tables, panels and attachments is replaced when you save.
+            <T>
+              Markdown. Headings, lists, quotes, code, bold, italic and links are kept; other Jira
+              formatting such as tables, panels and attachments is replaced when you save.
+            </T>
           </p>
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
-              Cancel
+              <T>Cancel</T>
             </Button>
             <Button size="sm" disabled={saving} onClick={() => void save()}>
-              {saving ? "Saving…" : "Save description"}
+              {saving ? gt("Saving…") : gt("Save description")}
             </Button>
           </div>
         </>
@@ -512,6 +556,8 @@ function TicketDescription(props: { issue: JiraIssueDetail; environmentId: Envir
 
 function TicketComments(props: { issue: JiraIssueDetail; environmentId: EnvironmentId }) {
   const { issue, environmentId } = props;
+  const gt = useGT();
+  const messages = useMessages();
   const addComment = useAtomCommand(jiraEnvironment.addComment);
   const [body, setBody] = useState("");
   const [posting, setPosting] = useState(false);
@@ -529,12 +575,15 @@ function TicketComments(props: { issue: JiraIssueDetail; environmentId: Environm
   return (
     <section className="flex flex-col gap-3">
       <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        Comments · {issue.comments.length}
+        <T>
+          Comments · <Var>{issue.comments.length}</Var>
+        </T>
       </h3>
       {issue.comments.map((comment) => (
         <article key={comment.id} className="rounded-md border px-3 py-2">
           <p className="mb-1 text-xs text-muted-foreground">
-            {comment.author?.displayName ?? "Someone"} · {formatRelativeTimeLabel(comment.created)}
+            {comment.author?.displayName ?? gt("Someone", { $context: "unknown comment author" })} ·{" "}
+            {formatRelativeTimeLabel(comment.created, undefined, messages)}
           </p>
           <ChatMarkdown text={comment.body} cwd={undefined} environmentId={environmentId} />
         </article>
@@ -547,15 +596,15 @@ function TicketComments(props: { issue: JiraIssueDetail; environmentId: Environm
         }}
       >
         <Textarea
-          aria-label="New comment"
-          placeholder="Add a comment (Markdown)"
+          aria-label={gt("New comment")}
+          placeholder={gt("Add a comment (Markdown)")}
           value={body}
           rows={3}
           onChange={(event) => setBody(event.target.value)}
         />
         <div className="flex justify-end">
           <Button type="submit" size="sm" disabled={!body.trim() || posting}>
-            {posting ? "Posting…" : "Comment"}
+            {posting ? gt("Posting…") : gt("Comment", { $context: "button, post a comment" })}
           </Button>
         </div>
       </form>

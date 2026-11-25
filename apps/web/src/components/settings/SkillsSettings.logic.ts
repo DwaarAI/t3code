@@ -62,6 +62,7 @@ export function withFrontmatterName(contents: string, name: string): string {
 }
 
 export function newSkillTemplate(name: string): string {
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- SKILL.md content an agent reads, not UI copy
   return `---
 name: ${name}
 description: What this skill does, and when an agent should use it.

@@ -1,10 +1,8 @@
 const { withProjectBuildGradle } = require("expo/config-plugins");
 
-// React Native's prebuilt fbjni (0.7.0) is compiled with NDK r28c and calls
-// libc++ symbols such as __cxa_init_primary_exception that NDK r27's
-// libc++_shared.so lacks. Expo defaults to r27, so a release APK packaged with
-// r27's runtime crashes on launch with "couldn't find DSO to load: libfbjni.so".
-// Build every native module with the NDK fbjni was built with.
+// React Native's prebuilt fbjni is built with NDK r28c and needs libc++ symbols
+// r27 lacks. Expo defaults to r27, so release APKs crash on launch with
+// "couldn't find DSO to load: libfbjni.so". Build everything with r28.
 const NDK_VERSION = "28.2.13676358";
 const ROOT_PLUGIN = 'apply plugin: "expo-root-project"';
 const NDK_LINE = `ext.ndkVersion = "${NDK_VERSION}"`;

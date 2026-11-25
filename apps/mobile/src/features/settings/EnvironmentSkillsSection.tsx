@@ -3,6 +3,7 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import type { EnvironmentId } from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
+import { useGT } from "gt-react-native";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -20,6 +21,7 @@ export function EnvironmentSkillsSection(props: {
   readonly environmentId: EnvironmentId;
   readonly disabled: boolean;
 }) {
+  const gt = useGT();
   const { environmentId } = props;
   const listed = Option.getOrNull(
     AsyncResult.value(useAtomValue(skillEnvironment.list({ environmentId, input: {} }))),
@@ -35,23 +37,23 @@ export function EnvironmentSkillsSection(props: {
     setPending(null);
     if (AsyncResult.isFailure(result)) {
       const cause = squashAtomCommandFailure(result);
-      setError(cause instanceof Error ? cause.message : "Could not update the skill.");
+      setError(cause instanceof Error ? cause.message : gt("Could not update the skill."));
     }
   }
 
   return (
-    <SettingsSection title="Skills">
+    <SettingsSection title={gt("Skills")}>
       {listed === null ? (
-        <Text className="p-4 text-sm text-foreground-muted">Loading skills…</Text>
+        <Text className="p-4 text-sm text-foreground-muted">{gt("Loading skills…")}</Text>
       ) : listed.skills.length === 0 ? (
-        <Text className="p-4 text-sm text-foreground-muted">No skills yet.</Text>
+        <Text className="p-4 text-sm text-foreground-muted">{gt("No skills yet.")}</Text>
       ) : (
         listed.skills.map((skill) => (
           <SettingsSwitchRow
             key={skill.name}
             icon="doc.text"
             label={`$${skill.commandName}`}
-            subtitle={[skill.source === "builtin" ? "Built-in" : null, skill.description]
+            subtitle={[skill.source === "builtin" ? gt("Built-in") : null, skill.description]
               .filter(Boolean)
               .join(" · ")}
             disabled={props.disabled || skill.source === "builtin" || pending !== null}

@@ -10,7 +10,6 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { Tool } from "effect/ai";
 
@@ -65,9 +64,7 @@ const makeHarness = Effect.gen(function* () {
     // The testkit's calling thread runs in this project, the folder session's root.
     Layer.mock(ProjectService.ProjectService)({
       getById: (projectId) =>
-        Effect.succeed(
-          Option.some({ id: projectId, workspaceRoot: `${FOLDERS_DIR}/checkout` } as Project),
-        ),
+        Effect.succeedSome({ id: projectId, workspaceRoot: `${FOLDERS_DIR}/checkout` } as Project),
     }),
     Layer.mock(FolderService.FolderService)({
       list: () =>

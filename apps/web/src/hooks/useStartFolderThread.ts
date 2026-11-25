@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m } from "~/i18n/messages";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import {
   isAtomCommandInterrupted,
@@ -54,8 +56,8 @@ export function useStartFolderSession() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not open a folder session",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: m(msg("Could not open a folder session")),
+            description: error instanceof Error ? error.message : m(msg("An error occurred.")),
           }),
         );
       }

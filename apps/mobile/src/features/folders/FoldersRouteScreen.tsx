@@ -1,5 +1,6 @@
 import { LegendList } from "@legendapp/list/react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useGT } from "gt-react-native";
 import { useState } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
 
@@ -8,6 +9,7 @@ import { SymbolView } from "../../components/ui/AppSymbol";
 import { AppText as Text } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { relativeTime } from "../../lib/time";
+import { NativeScrollView } from "../../native/NativeScrollViewMarker";
 import { useThreadShells } from "../../state/entities";
 import { refreshFolders, useEnvironmentFolders } from "../../state/folders";
 import { useSavedRemoteConnections } from "../../state/use-remote-environment-registry";
@@ -15,6 +17,7 @@ import { SettingsScreenContent } from "../settings/components/SettingsScreen";
 import { buildFolderList, type FolderListEntry } from "./folderList";
 
 export function FoldersRouteScreen() {
+  const gt = useGT();
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
   const environments = useEnvironmentFolders();
@@ -48,14 +51,13 @@ export function FoldersRouteScreen() {
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
       <AppBar
-        title="Folders"
-        sidebar={false}
+        title={gt("Folders")}
         onBack={() => navigation.goBack()}
         search={{
           value: searchQuery,
           onChangeText: setSearchQuery,
-          placeholder: "Search folders",
-          compactPlaceholder: "Search",
+          placeholder: gt("Search folders"),
+          compactPlaceholder: gt("Search", { $context: "search field placeholder" }),
           mode: "inline",
           compactToolbar: width < 700,
         }}
@@ -67,16 +69,20 @@ export function FoldersRouteScreen() {
           contentInsetAdjustmentBehavior="automatic"
           data={entries}
           estimatedItemSize={76}
+          renderScrollComponent={NativeScrollView}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item.key}
           ListEmptyComponent={
             <EmptyState
-              title={searchQuery.trim() ? "No matching folders" : "No folders yet"}
+              title={searchQuery.trim() ? gt("No matching folders") : gt("No folders yet")}
               detail={
                 searchQuery.trim()
-                  ? "Try another search."
-                  : "Create a folder from T3 Code on desktop or web to group one feature's worktrees across repositories."
+                  ? gt("Try another search.")
+                  : gt(
+                      "Create a folder from {product} on desktop or web to group one feature's worktrees across repositories.",
+                      { product: "T3 Code" },
+                    )
               }
             />
           }
@@ -93,20 +99,21 @@ function FolderRow(props: {
   readonly environmentLabel: string | null;
   readonly onPress: () => void;
 }) {
+  const gt = useGT();
   const { folder, threadCount, lastActivityAt } = props.entry;
   const repos = folder.members
     .filter((member) => member.archivedAt === null)
     .map((member) => member.repoName);
   const details = [
     folder.issue ? `#${folder.issue.number}` : null,
-    repos.join(", ") || "No repositories",
+    repos.join(", ") || gt("No repositories"),
     props.environmentLabel,
   ].filter((part): part is string => Boolean(part));
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open folder ${folder.name}`}
+      accessibilityLabel={gt("Open folder {name}", { name: folder.name })}
       className="mb-2 flex-row items-center gap-3 rounded-[20px] bg-card px-4 py-3 active:opacity-70"
       onPress={props.onPress}
     >
@@ -134,7 +141,9 @@ function FolderRow(props: {
           {details.join(" · ")}
         </Text>
         <Text className="text-2xs text-foreground-tertiary">
-          {threadCount === 1 ? "1 thread" : `${threadCount} threads`}
+          {gt("{count, plural, one {{count} thread} other {{count} threads}}", {
+            count: threadCount,
+          })}
         </Text>
       </View>
     </Pressable>

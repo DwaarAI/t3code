@@ -1,9 +1,7 @@
 /**
- * Jira Cloud stores rich text as Atlassian Document Format (ADF). Clients and
- * agents work in Markdown, so descriptions and comments are converted at the
- * server boundary. Reading covers the nodes Jira's editor produces; writing
- * covers headings, paragraphs, lists, quotes, rules, code blocks, and bold,
- * italic, strikethrough, code and link marks. Anything else reads as text.
+ * Jira stores rich text as ADF; clients and agents use Markdown, so we convert at the
+ * server boundary. Reading covers what Jira's editor produces; writing covers block
+ * nodes plus bold, italic, strikethrough, code and link marks. Anything else is text.
  */
 
 import * as DateTime from "effect/DateTime";

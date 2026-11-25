@@ -3,10 +3,11 @@ name: Mobile Android APK
 # Checks closed testing hourly. Each new beta gets one versioned prerelease.
 # Unchanged checks publish nothing.
 on:
-  schedule:
-    # Avoid minute zero, when GitHub scheduled jobs are busiest.
-    - cron: "23 * * * *"
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: mobile-android-apk
@@ -37,7 +38,7 @@ jobs:
 
       - name: Checkout
         if: steps.credentials.outputs.present == 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: .github/scripts
 

@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -11,7 +12,7 @@ import * as SkillService from "./SkillService.ts";
 
 const TestLayer = SkillService.layer.pipe(
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-skill-service-" })),
-  Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
 );
 
 const skillMd = (description: string) => `---\ndescription: ${description}\n---\n\nDo it.\n`;
@@ -73,7 +74,7 @@ describe("SkillService", () => {
         const skills = yield* SkillService.SkillService;
         const entry = { path: "SKILL.md", contents: skillMd("x"), executable: false };
 
-        const reasons = yield* Effect.all(
+        const reasons = yield* Effect.forEach(
           [
             skills.save({ name: "a", files: [] }),
             skills.save({
@@ -89,12 +90,12 @@ describe("SkillService", () => {
               files: [entry, { path: "/abs.md", contents: "", executable: false }],
             }),
             skills.save({ name: "dwaar-code-reviewer", files: [entry] }),
-          ].map((effect) =>
+          ],
+          (effect) =>
             effect.pipe(
               Effect.flip,
               Effect.map((error) => error.reason),
             ),
-          ),
         );
         expect(reasons).toEqual([
           "invalid_input",

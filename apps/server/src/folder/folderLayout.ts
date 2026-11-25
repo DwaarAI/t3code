@@ -35,11 +35,9 @@ export interface FolderScope {
 }
 
 /**
- * A cwd belongs to a folder when it is the folder directory itself (a folder
- * session that spans every repository) or sits inside one of its member
- * worktrees, `<foldersDir>/<slug>/<repo>`. String math on server-produced
- * absolute paths, so provider adapters can call it on every session start
- * without extra services.
+ * A cwd belongs to a folder when it is the folder directory itself (a folder session) or
+ * inside a member worktree, `<foldersDir>/<slug>/<repo>`. Plain string math on server-made
+ * absolute paths, so adapters can call it on every session start without extra services.
  */
 export function resolveFolderScope(
   cwd: string | undefined,

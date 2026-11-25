@@ -79,7 +79,7 @@ describe("threadAttentionReminder", () => {
 });
 
 describe("environmentAttentionReminders", () => {
-  it("reminds on the parent when its subagent is waiting", () => {
+  it("reminds on the parent when its subagent waits on the user", () => {
     const parentId = ThreadId.make("parent");
     const parent = thread({
       id: parentId,
@@ -87,8 +87,10 @@ describe("environmentAttentionReminders", () => {
       latestRunId: RunId.make("run-1"),
       lineage: { rootThreadId: parentId, parentThreadId: null, relationshipToParent: null },
     });
+    const question = pendingRequest("child-request", "user_input").pendingRuntimeRequest!;
     const child = thread({
-      ...pendingRequest("child-request", "user_input"),
+      // Plain questions go to the coordinating agent; user-only cards need the user.
+      pendingRuntimeRequest: { ...question, userOnly: true },
       id: ThreadId.make("child"),
       title: "Child",
       status: "running",
@@ -102,6 +104,8 @@ describe("environmentAttentionReminders", () => {
     expect(reminders.map((reminder) => [reminder.threadId, reminder.kind])).toEqual([
       [parentId, "input"],
     ]);
+    const answeredByAgent = thread({ ...child, pendingRuntimeRequest: question });
+    expect(environmentAttentionReminders(ENV, [parent, answeredByAgent], NOW)).toEqual([]);
   });
 });
 

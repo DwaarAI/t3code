@@ -68,7 +68,7 @@ describe("buildRecentActivityRows", () => {
   it("shows all three ages in a fixed order, with a dash for a missing time", () => {
     const rows = buildRecentActivityRows({ threads, projects, sort: "viewed", nowMs });
     expect(rows.map((row) => row.times.map((time) => `${time.label} ${time.age}`))).toEqual([
-      ["Updated 1h", "Prompt —", "Viewed 1m"],
+      ["Updated 1h", "Prompt -", "Viewed 1m"],
       ["Updated 2m", "Prompt 5m", "Viewed 30m"],
     ]);
   });

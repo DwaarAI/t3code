@@ -46,7 +46,7 @@ describe("buildRecentActivityRows", () => {
     const [row] = build([thread("a", { latestUserMessageAt: null })], { sort: "prompt" });
     expect(row?.times.map(({ label, value, active }) => ({ label, value, active }))).toEqual([
       { label: "Updated", value: "30m", active: false },
-      { label: "Prompt", value: "—", active: true },
+      { label: "Prompt", value: "–", active: true },
       { label: "Viewed", value: "10m", active: false },
     ]);
   });
@@ -96,6 +96,6 @@ describe("compactRelativeTime", () => {
   it("shortens the shared relative label", () => {
     expect(compactRelativeTime(minutesAgo(0), NOW)).toBe("now");
     expect(compactRelativeTime(minutesAgo(180), NOW)).toBe("3h");
-    expect(compactRelativeTime(null, NOW)).toBe("—");
+    expect(compactRelativeTime(null, NOW)).toBe("–");
   });
 });

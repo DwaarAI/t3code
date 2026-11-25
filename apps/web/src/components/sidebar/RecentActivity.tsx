@@ -6,6 +6,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useNavigate } from "@tanstack/react-router";
+import { T, useGT, useMessages } from "gt-react";
 import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { create } from "zustand";
@@ -64,7 +65,7 @@ export function openRecentActivity(anchorToTrigger = true): void {
   });
 }
 
-export function closeRecentActivity(): void {
+function closeRecentActivity(): void {
   useRecentActivityStore.setState({ open: false });
 }
 
@@ -80,14 +81,19 @@ export function isRecentActivityOpen(): boolean {
 export function RecentActivityTrigger() {
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const shortcutLabel = shortcutLabelForCommand(keybindings, "recentActivity.toggle");
+  const gt = useGT();
   return (
     <PopoverTrigger
       handle={recentActivityPopoverHandle}
       id={RECENT_ACTIVITY_TRIGGER_ID}
       render={
         <SidebarHeaderIconButton
-          label="Recent activity"
-          tooltip={shortcutLabel ? `Recent activity (${shortcutLabel})` : "Recent activity"}
+          label={gt("Recent activity")}
+          tooltip={
+            shortcutLabel
+              ? gt("Recent activity ({shortcut})", { shortcut: shortcutLabel })
+              : gt("Recent activity")
+          }
         />
       }
     >
@@ -102,6 +108,7 @@ export function RecentActivityHost() {
   const anchor = useRecentActivityStore((state) => state.anchor);
   const { isMobile, openMobile, setOpenMobile } = useSidebar();
   const firstRowRef = useRef<HTMLButtonElement | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- resets the module-level open flag when the host unmounts, so a remount does not reopen a stale popover
   useEffect(() => () => closeRecentActivity(), []);
 
   return (
@@ -155,6 +162,8 @@ function RecentActivityPanel(props: {
   readonly onSelect: () => void;
 }) {
   const navigate = useNavigate();
+  const gt = useGT();
+  const messages = useMessages();
   const threads = useThreadShells();
   const projects = useProjects();
   const folders = useEnvironmentFolders();
@@ -173,6 +182,7 @@ function RecentActivityPanel(props: {
     folders,
     sort,
     nowMs: Date.parse(`${nowMinute}:00.000Z`),
+    resolve: messages,
   });
 
   const selectRow = (row: RecentActivityRow) => {
@@ -186,9 +196,11 @@ function RecentActivityPanel(props: {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2 ps-2">
-        <PopoverTitle>Recent activity</PopoverTitle>
+        <PopoverTitle>
+          <T>Recent activity</T>
+        </PopoverTitle>
         <ToggleGroup
-          aria-label="Sort recent activity"
+          aria-label={gt("Sort recent activity")}
           value={[sort]}
           onValueChange={(next) => {
             const value = next[0];
@@ -198,14 +210,14 @@ function RecentActivityPanel(props: {
         >
           {RECENT_ACTIVITY_SORT_OPTIONS.map((option) => (
             <Toggle key={option.sort} value={option.sort}>
-              {option.label}
+              {messages(option.label)}
             </Toggle>
           ))}
         </ToggleGroup>
       </div>
       {rows.length === 0 ? (
         <p className="px-2 py-6 text-center text-muted-foreground text-xs">
-          Threads you open appear here.
+          <T>Threads you open appear here.</T>
         </p>
       ) : (
         <ul className="flex flex-col" onKeyDown={moveRowFocus}>

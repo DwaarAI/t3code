@@ -1,15 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Embeds `apps/server/builtin-skills/**` into `src/skills/builtinSkills.gen.ts`.
- *
- * The server runs as raw TypeScript in dev, as a bundle, and as a single-file
- * executable, and only the last two could carry loose asset files. Embedding
- * the files as strings reaches all three. Run after editing a built-in skill:
- *
- *   node apps/server/scripts/generate-builtin-skills.ts
- *
- * `builtinSkills.test.ts` fails when the generated module is stale.
+ * Embeds `apps/server/builtin-skills/**` as strings, the one form raw TS, the bundle and
+ * the single-file executable all carry. Run `node apps/server/scripts/generate-builtin-skills.ts`
+ * after editing a built-in skill; `builtinSkills.test.ts` fails when the output is stale.
  */
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";

@@ -1,3 +1,5 @@
+import { msg } from "gt-react";
+import { m } from "~/i18n/messages";
 import { providerResumeCommand } from "@t3tools/client-runtime/state/providerSessionRef";
 import {
   isAtomCommandInterrupted,
@@ -18,13 +20,17 @@ export function useCopyProviderSession() {
   const fetchRef = useAtomCommand(providerSessionRef.fetch, { reportFailure: false });
   const { copyToClipboard } = useCopyToClipboard<{ label: string; value: string }>({
     onCopy: ({ label, value }) => {
-      toastManager.add({ type: "success", title: `${label} copied`, description: value });
+      toastManager.add({
+        type: "success",
+        title: m(msg("{label} copied"), { label }),
+        description: value,
+      });
     },
     onError: (error, { label }) => {
       toastManager.add(
         stackedThreadToast({
           type: "error",
-          title: `Could not copy ${label}`,
+          title: m(msg("Could not copy {label}"), { label }),
           description: error.message,
         }),
       );
@@ -47,8 +53,8 @@ export function useCopyProviderSession() {
         toastManager.add(
           stackedThreadToast({
             type: "error",
-            title: "Could not read the session",
-            description: error instanceof Error ? error.message : "An error occurred.",
+            title: m(msg("Could not read the session")),
+            description: error instanceof Error ? error.message : m(msg("An error occurred.")),
           }),
         );
       }
@@ -58,24 +64,24 @@ export function useCopyProviderSession() {
     if (sessionId === null) {
       toastManager.add({
         type: "info",
-        title: "No provider session yet",
-        description: "The provider reports its session id after the first message.",
+        title: m(msg("No provider session yet")),
+        description: m(msg("The provider reports its session id after the first message.")),
       });
       return;
     }
     if (input.what === "session-id") {
-      copyToClipboard(sessionId, { label: "Session ID", value: sessionId });
+      copyToClipboard(sessionId, { label: m(msg("Session ID")), value: sessionId });
       return;
     }
     const command = providerResumeCommand({ provider, sessionId, cwd: input.cwd });
     if (command === null) {
       toastManager.add({
         type: "info",
-        title: "No resume command",
-        description: "Only Claude Code and Codex sessions can be resumed from a terminal.",
+        title: m(msg("No resume command")),
+        description: m(msg("Only Claude Code and Codex sessions can be resumed from a terminal.")),
       });
       return;
     }
-    copyToClipboard(command, { label: "Resume command", value: command });
+    copyToClipboard(command, { label: m(msg("Resume command")), value: command });
   };
 }

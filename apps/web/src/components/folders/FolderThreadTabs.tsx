@@ -3,6 +3,7 @@ import type { FolderThreadMatch } from "@t3tools/client-runtime/state/folders";
 import { threadRuntimeIsActive } from "@t3tools/client-runtime/state/models";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
+import { T, useGT } from "gt-react";
 import { FolderIcon, PlusIcon } from "lucide-react";
 import { memo } from "react";
 
@@ -42,6 +43,7 @@ function FolderThreadTabStrip(
   const { environmentId, threadId, match } = props;
   const { folder, member } = match;
   const router = useRouter();
+  const gt = useGT();
   const startFolderThread = useStartFolderThread();
   const startFolderSession = useStartFolderSession();
   const handOff = useFolderHandoff();
@@ -57,7 +59,7 @@ function FolderThreadTabStrip(
           : thread.worktreePath === null && thread.projectId === folder.rootProjectId),
     )
     .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const scopeLabel = member?.repoName ?? "All repositories";
+  const scopeLabel = member?.repoName ?? gt("All repositories");
   const isDraft = !threads.some((thread) => thread.id === threadId);
   const current = threads.find((thread) => thread.id === threadId);
   // Review whatever is in the worktree, including changes other threads made,
@@ -84,7 +86,7 @@ function FolderThreadTabStrip(
       </span>
       <div
         role="tablist"
-        aria-label={`Threads in ${scopeLabel}`}
+        aria-label={gt("Threads in {scope}", { scope: scopeLabel })}
         className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
       >
         {folderTabThreads(threads, threadId).map((thread) => {
@@ -110,7 +112,10 @@ function FolderThreadTabStrip(
               )}
             >
               {threadRuntimeIsActive(thread.runtime) ? (
-                <span aria-label="Running" className="size-1.5 shrink-0 rounded-full bg-primary" />
+                <span
+                  aria-label={gt("Running", { $context: "thread status" })}
+                  className="size-1.5 shrink-0 rounded-full bg-primary"
+                />
               ) : null}
               <span className="truncate">{thread.title}</span>
             </button>
@@ -122,24 +127,24 @@ function FolderThreadTabStrip(
             aria-selected
             className="flex h-7 shrink-0 items-center rounded-md bg-accent px-2.5 font-medium text-foreground text-xs"
           >
-            New thread
+            <T>New thread</T>
           </span>
         ) : null}
         <Button
           size="icon-xs"
           variant="ghost"
-          aria-label={member ? "New thread in this worktree" : "New folder session"}
+          aria-label={member ? gt("New thread in this worktree") : gt("New folder session")}
           onClick={newThread}
         >
           <PlusIcon />
         </Button>
       </div>
       <Button size="xs" variant="ghost" onClick={() => void startReview(reviewSource)}>
-        Review
+        <T context="button, start a code review">Review</T>
       </Button>
       {props.isServerThread && current ? (
         <Button size="xs" variant="ghost" onClick={() => void handOff(current)}>
-          Handoff
+          <T context="button, continue in a new thread">Handoff</T>
         </Button>
       ) : null}
     </div>

@@ -1,15 +1,15 @@
 import type { EnvironmentId, OrchestrationV2ThreadShell, ThreadId } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import { mFallback, msg } from "gt-i18n";
+import type { MFunctionType } from "gt-i18n/types";
 
 import type { PendingSubagentRequest } from "./state/models.ts";
 import { pendingSubagentRequestsByThread } from "./state/threadShell.ts";
 
 /**
- * Reminders for threads blocked on the user (a pending approval or question).
- * Each client schedules its own: web/desktop with a timer, mobile with an OS
- * local notification, so a reminder still fires while the phone app sleeps.
- * The shell stream is the only signal for "handled"; a request answered from
- * any device drops the flag and every client cancels its reminder.
+ * Reminders for threads blocked on the user. Each client schedules its own (mobile as an OS
+ * notification, so it fires while the app sleeps). The shell stream is the only "handled"
+ * signal: a request answered on any device drops the flag and every client cancels.
  */
 
 export type AttentionReminderKind = "approval" | "input";
@@ -95,11 +95,13 @@ export function environmentAttentionReminders(
   const subagentRequests = pendingSubagentRequestsByThread(threads);
   const reminders: AttentionReminder[] = [];
   for (const thread of threads) {
+    const subagentRequest = subagentRequests.get(thread.id) ?? null;
     const reminder = threadAttentionReminder(
       environmentId,
       thread,
       nowMs,
-      subagentRequests.get(thread.id) ?? null,
+      // A user-only card still waits on the user, so it reminds like any question.
+      subagentRequest === "user_only_input" ? "user_input" : subagentRequest,
     );
     if (reminder) reminders.push(reminder);
   }
@@ -141,6 +143,11 @@ export function planAttentionReminders(input: {
   return { schedule, cancel };
 }
 
-export function attentionReminderTitle(kind: AttentionReminderKind): string {
-  return kind === "approval" ? "Still waiting for approval" : "Still waiting for your answer";
+export function attentionReminderTitle(
+  kind: AttentionReminderKind,
+  resolve: MFunctionType = mFallback,
+): string {
+  return kind === "approval"
+    ? resolve(msg("Still waiting for approval"))
+    : resolve(msg("Still waiting for your answer"));
 }

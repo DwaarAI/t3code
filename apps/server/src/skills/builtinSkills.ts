@@ -1,16 +1,7 @@
 /**
- * Built-in skills ship inside the server (see `apps/server/builtin-skills`) and are
- * written to the skills directory as a Claude Code plugin named `t3`:
- *
- *   <skillsDir>/.claude-plugin/plugin.json
- *   <skillsDir>/skills/<name>/SKILL.md, scripts/, ...
- *
- * Claude loads the directory through the Agent SDK `plugins` option and Codex
- * through `skills/extraRoots/set`. Both namespace the skills by the plugin
- * name, so a skill is invoked as `$t3:<name>` everywhere. Nothing is written
- * to the user's own `~/.claude` or `~/.codex`.
- *
- * @module skills/builtinSkills
+ * Built-in skills are written to `skillsDir` as a Claude Code plugin named `t3`, loaded by
+ * Claude through the SDK `plugins` option and by Codex through `skills/extraRoots/set`, so
+ * a skill is `$t3:<name>` everywhere. Nothing is written to the user's `~/.claude` or `~/.codex`.
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -37,11 +28,9 @@ const PLUGIN_MANIFEST = `{
 `;
 
 /**
- * Rewrite the built-in skills from the copy embedded in this server build.
- * Earlier built-ins, including ones a newer build dropped, are removed first,
- * so the directory always matches the running server. Skill directories
- * without the marker are custom skills: they are left alone, and a built-in
- * sharing a custom skill's name is skipped rather than overwriting it.
+ * Earlier built-ins, including ones this build dropped, are removed first so the directory
+ * matches the running server. Directories without the marker are custom skills: left alone,
+ * and a built-in sharing a custom skill's name is skipped rather than overwriting it.
  */
 export const installBuiltinSkills = Effect.fn("installBuiltinSkills")(function* (
   dirs: { readonly skillsDir: string; readonly skillRootsDir: string },

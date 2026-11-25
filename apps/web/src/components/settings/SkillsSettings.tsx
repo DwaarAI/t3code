@@ -14,8 +14,10 @@ import * as Option from "effect/Option";
 import { AsyncResult } from "effect/reactivity";
 import JSZip from "jszip";
 import { MoreVertical, PlusIcon, UploadIcon, XIcon } from "lucide-react";
+import { msg, T, useGT, Var } from "gt-react";
 import { useRef, useState } from "react";
 
+import { m } from "../../i18n/messages";
 import { skillEnvironment } from "../../state/skills";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
@@ -65,21 +67,24 @@ interface SkillDraft {
 
 const failureMessage = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
   const error = squashAtomCommandFailure(result);
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return error instanceof Error ? error.message : m(msg("Something went wrong."));
 };
 
 export function SkillsSettingsPanel() {
+  const gt = useGT();
   const { connectedEnvironments } = useSettingsScope();
   const environments = connectedEnvironments.filter(
     (environment) => environment.serverConfig?.environment.capabilities.skills === true,
   );
   return (
     <SettingsPageContainer>
-      <SettingsSection id="skills" title="Skills">
+      <SettingsSection id="skills" title={gt("Skills")}>
         {environments.length === 0 ? (
           <SettingsRow
-            title="Skills"
-            description="Connect an environment running an updated server to manage its skills."
+            title={gt("Skills")}
+            description={gt(
+              "Connect an environment running an updated server to manage its skills.",
+            )}
           />
         ) : (
           environments.map((environment) => (
@@ -97,6 +102,7 @@ export function SkillsSettingsPanel() {
 
 function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string | null }) {
   const { environmentId } = props;
+  const gt = useGT();
   const listed = Option.getOrNull(
     AsyncResult.value(useAtomValue(skillEnvironment.list({ environmentId, input: {} }))),
   );
@@ -117,7 +123,7 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
       if (!isAtomCommandInterrupted(result)) {
         toastManager.add({
           type: "error",
-          title: "Could not open skill",
+          title: gt("Could not open skill"),
           description: failureMessage(result),
         });
       }
@@ -126,13 +132,13 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
     setDraft(
       mode === "edit"
         ? {
-            title: `Edit ${skill.commandName}`,
+            title: gt("Edit {skill}", { skill: skill.commandName }),
             name: skill.name,
             previousName: skill.name,
             files: result.value.files,
           }
         : {
-            title: `Duplicate ${skill.commandName}`,
+            title: gt("Duplicate {skill}", { skill: skill.commandName }),
             name: `${skill.name}-copy`,
             files: result.value.files,
           },
@@ -144,8 +150,8 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
     if (!normalized.some((file) => file.path === SKILL_ENTRY_FILE)) {
       toastManager.add({
         type: "error",
-        title: "No SKILL.md found",
-        description: `A skill folder needs a ${SKILL_ENTRY_FILE} file.`,
+        title: gt("No {file} found", { file: SKILL_ENTRY_FILE }),
+        description: gt("A skill folder needs a {file} file.", { file: SKILL_ENTRY_FILE }),
       });
       return;
     }
@@ -153,20 +159,25 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
     if (totalBytes > SKILL_MAX_TOTAL_BYTES) {
       toastManager.add({
         type: "error",
-        title: "Skill is too large",
-        description: `Skills can hold up to ${Math.floor(SKILL_MAX_TOTAL_BYTES / 1000)} KB of text files.`,
+        title: gt("Skill is too large"),
+        description: gt("Skills can hold up to {size} KB of text files.", {
+          size: Math.floor(SKILL_MAX_TOTAL_BYTES / 1000),
+        }),
       });
       return;
     }
     if (skipped > 0) {
       toastManager.add({
         type: "info",
-        title: `Skipped ${skipped} binary ${skipped === 1 ? "file" : "files"}`,
-        description: "Skills carry text files only.",
+        title: gt(
+          "{count, plural, one {Skipped {count} binary file} other {Skipped {count} binary files}}",
+          { count: skipped },
+        ),
+        description: gt("Skills carry text files only."),
       });
     }
     setDraft({
-      title: "Import skill",
+      title: gt("Import skill"),
       name: importedSkillName(normalized, sourceName),
       files: normalized,
     });
@@ -192,7 +203,7 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
     try {
       zip = await JSZip.loadAsync(file);
     } catch {
-      toastManager.add({ type: "error", title: "Could not read the zip file" });
+      toastManager.add({ type: "error", title: gt("Could not read the zip file") });
       return;
     }
     const files: SkillFile[] = [];
@@ -219,7 +230,7 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       toastManager.add({
         type: "error",
-        title: "Could not update skill",
+        title: gt("Could not update skill"),
         description: failureMessage(result),
       });
     }
@@ -232,7 +243,7 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
     if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
       toastManager.add({
         type: "error",
-        title: "Could not delete skill",
+        title: gt("Could not delete skill"),
         description: failureMessage(result),
       });
     }
@@ -240,8 +251,13 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
 
   return (
     <SettingsRow
-      title={props.label ? `Skills on ${props.label}` : "Skills"}
-      description="Claude and Codex chats run these as $t3:<name>. Changes apply to chats started afterwards."
+      title={
+        props.label ? gt("Skills on {environment}", { environment: props.label }) : gt("Skills")
+      }
+      description={gt(
+        "Claude and Codex chats run these as {command}. Changes apply to chats started afterwards.",
+        { command: "$t3:<name>" },
+      )}
       control={
         <div className="flex items-center gap-2">
           <input
@@ -271,11 +287,15 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
           />
           <Menu>
             <MenuTrigger render={<Button size="sm" variant="outline" disabled={busy} />}>
-              <UploadIcon className="size-3.5" /> Import
+              <UploadIcon className="size-3.5" /> <T context="button, import a skill">Import</T>
             </MenuTrigger>
             <MenuPopup align="end">
-              <MenuItem onClick={() => folderInput.current?.click()}>Folder…</MenuItem>
-              <MenuItem onClick={() => zipInput.current?.click()}>.zip file…</MenuItem>
+              <MenuItem onClick={() => folderInput.current?.click()}>
+                <T>Folder…</T>
+              </MenuItem>
+              <MenuItem onClick={() => zipInput.current?.click()}>
+                <T>.zip file…</T>
+              </MenuItem>
             </MenuPopup>
           </Menu>
           <Button
@@ -284,7 +304,7 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
             disabled={busy}
             onClick={() =>
               setDraft({
-                title: "New skill",
+                title: gt("New skill"),
                 name: "my-skill",
                 files: [
                   {
@@ -296,7 +316,7 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
               })
             }
           >
-            <PlusIcon className="size-3.5" /> New skill
+            <PlusIcon className="size-3.5" /> <T>New skill</T>
           </Button>
         </div>
       }
@@ -304,10 +324,12 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
       <div className="pt-3 pb-2">
         {listed === null ? (
           <p className="inline-flex items-center gap-2 py-2 text-sm text-muted-foreground">
-            <Spinner size="xs" /> Loading skills…
+            <Spinner size="xs" /> <T>Loading skills…</T>
           </p>
         ) : listed.skills.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">No skills yet.</p>
+          <p className="py-2 text-sm text-muted-foreground">
+            <T>No skills yet.</T>
+          </p>
         ) : (
           listed.skills.map((skill) => (
             <SkillListItem
@@ -332,16 +354,24 @@ function EnvironmentSkills(props: { environmentId: EnvironmentId; label: string 
       <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {removing?.commandName}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              <T>
+                Delete <Var>{removing?.commandName}</Var>?
+              </T>
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Its folder and every file in it are removed from this environment. New chats can no
-              longer use it.
+              <T>
+                Its folder and every file in it are removed from this environment. New chats can no
+                longer use it.
+              </T>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose render={<Button variant="outline" />}>
+              <T>Cancel</T>
+            </AlertDialogClose>
             <Button variant="destructive" onClick={() => void confirmRemove()}>
-              Delete skill
+              <T>Delete skill</T>
             </Button>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -359,6 +389,7 @@ function SkillListItem(props: {
   onDelete: () => void;
 }) {
   const { skill } = props;
+  const gt = useGT();
   const custom = skill.source === "custom";
   return (
     <div className="flex items-center gap-3 border-t border-border/50 py-2.5">
@@ -367,13 +398,15 @@ function SkillListItem(props: {
           <p className="truncate font-mono text-sm">{skill.commandName}</p>
           {custom ? null : (
             <Badge size="sm" variant="outline">
-              Built-in
+              <T>Built-in</T>
             </Badge>
           )}
         </div>
         <p className="truncate text-xs text-muted-foreground">
-          {skill.description ?? "No description"}
-          {skill.files.length > 1 ? ` · ${skill.files.length} files` : ""}
+          {skill.description ?? gt("No description")}
+          {skill.files.length > 1
+            ? ` · ${gt("{count, plural, one {{count} file} other {{count} files}}", { count: skill.files.length })}`
+            : ""}
         </p>
       </div>
       {custom ? (
@@ -382,7 +415,11 @@ function SkillListItem(props: {
           checked={skill.enabled}
           disabled={props.busy}
           onCheckedChange={props.onToggle}
-          aria-label={`${skill.enabled ? "Disable" : "Enable"} ${skill.commandName}`}
+          aria-label={
+            skill.enabled
+              ? gt("Disable {skill}", { skill: skill.commandName })
+              : gt("Enable {skill}", { skill: skill.commandName })
+          }
         />
       ) : null}
       <Menu>
@@ -392,18 +429,24 @@ function SkillListItem(props: {
               size="icon-sm"
               variant="ghost-muted"
               disabled={props.busy}
-              aria-label={`${skill.commandName} options`}
+              aria-label={gt("{skill} options", { skill: skill.commandName })}
             />
           }
         >
           <MoreVertical />
         </MenuTrigger>
         <MenuPopup align="end">
-          {custom ? <MenuItem onClick={props.onEdit}>Edit</MenuItem> : null}
-          <MenuItem onClick={props.onDuplicate}>Duplicate</MenuItem>
+          {custom ? (
+            <MenuItem onClick={props.onEdit}>
+              <T context="menu item, edit a skill">Edit</T>
+            </MenuItem>
+          ) : null}
+          <MenuItem onClick={props.onDuplicate}>
+            <T context="menu item, duplicate a skill">Duplicate</T>
+          </MenuItem>
           {custom ? (
             <MenuItem variant="destructive" onClick={props.onDelete}>
-              Delete
+              <T context="menu item, delete a skill">Delete</T>
             </MenuItem>
           ) : null}
         </MenuPopup>
@@ -418,6 +461,7 @@ function SkillEditorDialog(props: {
   onClose: () => void;
 }) {
   const { draft } = props;
+  const gt = useGT();
   const save = useAtomCommand(skillEnvironment.save, { reportFailure: false });
   const [name, setName] = useState(draft.name);
   const [entry, setEntry] = useState(
@@ -445,7 +489,10 @@ function SkillEditorDialog(props: {
     });
     setSaving(false);
     if (result._tag === "Success") {
-      toastManager.add({ type: "success", title: `Saved ${result.value.skill.commandName}` });
+      toastManager.add({
+        type: "success",
+        title: gt("Saved {skill}", { skill: result.value.skill.commandName }),
+      });
       props.onClose();
     } else if (!isAtomCommandInterrupted(result)) {
       setError(failureMessage(result));
@@ -458,8 +505,10 @@ function SkillEditorDialog(props: {
         <DialogHeader>
           <DialogTitle>{draft.title}</DialogTitle>
           <DialogDescription>
-            Agents read {SKILL_ENTRY_FILE} when the skill runs. Its description tells them when to
-            use it.
+            <T>
+              Agents read <Var>{SKILL_ENTRY_FILE}</Var> when the skill runs. Its description tells
+              them when to use it.
+            </T>
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
@@ -471,7 +520,9 @@ function SkillEditorDialog(props: {
             }}
           >
             <div className="grid gap-1.5">
-              <Label htmlFor="skill-name">Name</Label>
+              <Label htmlFor="skill-name">
+                <T>Name</T>
+              </Label>
               <Input
                 id="skill-name"
                 font="mono"
@@ -480,7 +531,10 @@ function SkillEditorDialog(props: {
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Lowercase letters, numbers, and dashes. Invoked as $t3:{name || "<name>"}.
+                <T>
+                  Lowercase letters, numbers, and dashes. Invoked as{" "}
+                  <Var>{`$t3:${name || "<name>"}`}</Var>.
+                </T>
               </p>
             </div>
             <div className="grid gap-1.5">
@@ -494,20 +548,22 @@ function SkillEditorDialog(props: {
             </div>
             {others.length > 0 ? (
               <div className="grid gap-1.5">
-                <Label>Other files</Label>
+                <Label>
+                  <T>Other files</T>
+                </Label>
                 <ul className="grid gap-1">
                   {others.map((file) => (
                     <li key={file.path} className="flex items-center gap-2 text-sm">
                       <span className="min-w-0 flex-1 truncate font-mono text-xs">{file.path}</span>
                       {file.executable || file.contents.startsWith("#!") ? (
                         <Badge size="sm" variant="outline">
-                          executable
+                          <T context="file mode badge">executable</T>
                         </Badge>
                       ) : null}
                       <Button
                         size="icon-xs"
                         variant="ghost-muted"
-                        aria-label={`Remove ${file.path}`}
+                        aria-label={gt("Remove {path}", { path: file.path })}
                         onClick={() =>
                           setOthers((current) =>
                             current.filter((other) => other.path !== file.path),
@@ -530,10 +586,10 @@ function SkillEditorDialog(props: {
         </DialogPanel>
         <DialogFooter variant="bare">
           <Button variant="outline" onClick={props.onClose}>
-            Cancel
+            <T>Cancel</T>
           </Button>
           <Button onClick={() => void submit()} disabled={saving || name.length === 0}>
-            {saving ? "Saving…" : "Save skill"}
+            {saving ? gt("Saving…") : gt("Save skill")}
           </Button>
         </DialogFooter>
       </DialogPopup>
