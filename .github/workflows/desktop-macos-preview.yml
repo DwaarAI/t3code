@@ -15,8 +15,8 @@ name: Desktop macOS Preview
 # download needs a write token.
 
 on:
-  pull_request:
-    types: [labeled]
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: read

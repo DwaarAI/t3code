@@ -9,9 +9,8 @@ name: Mobile Fingerprint Label
 # untrusted data: it is validated, and at worst a PR mislabels itself.
 
 on:
-  workflow_run:
-    workflows: [Mobile Fingerprint Check]
-    types: [completed]
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -7,6 +7,7 @@ name: Release desktop build
 # `cli_archive` is set, the self-contained CLI archive for its platform.
 
 on:
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_call:
     secrets:
       CSC_LINK:
@@ -119,6 +120,7 @@ on:
 
 # electron-builder leaves the default arch (x64) out of the unpacked app's
 # directory name.
+
 env:
   UNPACKED_DIR: ${{ inputs.platform }}-${{ inputs.arch != 'x64' && format('{0}-', inputs.arch) || '' }}unpacked
 

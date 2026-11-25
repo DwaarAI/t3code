@@ -1,12 +1,7 @@
 name: Issue Labels
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/ISSUE_TEMPLATE/**
-      - .github/workflows/issue-labels.yml
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
 
 permissions: {}

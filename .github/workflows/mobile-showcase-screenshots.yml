@@ -1,6 +1,7 @@
 name: Mobile Showcase Screenshots
 
 on:
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
     inputs:
       platform:

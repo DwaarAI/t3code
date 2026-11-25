@@ -10,8 +10,8 @@ name: Mobile EAS Preview (Fork)
 # Same-repo PRs deploy on every push while labeled, via mobile-eas-preview.yml.
 
 on:
-  pull_request_target:
-    types: [labeled]
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: read

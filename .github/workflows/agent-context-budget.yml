@@ -4,8 +4,8 @@ name: Agent Context Budget
 # keeps that file equal to the measured context, so the context cannot grow by editing the file.
 # To accept growth on purpose, a maintainer adds the agent-context-increase label.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -20,6 +20,7 @@ name: Mobile EAS Production
 # workflow_dispatch remains as a manual override for both modes (e.g. to
 # retry an errored build or force an OTA).
 on:
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
     inputs:
       mode:
@@ -55,20 +56,6 @@ on:
         description: "OTA update message (mode=update only)"
         required: false
         type: string
-  push:
-    branches: [main]
-    paths:
-      - apps/mobile/**
-      - packages/client-runtime/**
-      - packages/contracts/**
-      - packages/shared/**
-      - assets/**
-      - scripts/**
-      - patches/**
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - .github/workflows/mobile-eas-production.yml
-      - .github/workflows/mobile-eas-production-build.yml
 
 permissions:
   contents: read

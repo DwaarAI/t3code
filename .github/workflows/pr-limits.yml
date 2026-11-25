@@ -8,10 +8,7 @@ name: PR Limits
 # sweep reads the variable once when it starts; to stop one, cancel the run.
 
 on:
-  pull_request_target:
-    types: [opened, reopened]
-  schedule:
-    - cron: "23 5 * * *"
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
     inputs:
       dry_run:

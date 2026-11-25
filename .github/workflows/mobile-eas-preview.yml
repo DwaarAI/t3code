@@ -1,8 +1,8 @@
 name: Mobile EAS Preview
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, labeled]
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: read

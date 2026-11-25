@@ -1,8 +1,7 @@
 name: Close stale "needs more info" issues
 
 on:
-  schedule:
-    - cron: "17 6 * * *"
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
 
 permissions: {}

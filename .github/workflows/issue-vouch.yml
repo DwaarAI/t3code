@@ -1,14 +1,7 @@
 name: Issue Vouch
 
 on:
-  issues:
-    types: [opened, reopened]
-  push:
-    branches:
-      - main
-    paths:
-      - .github/VOUCHED.td
-      - .github/workflows/issue-vouch.yml
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
   workflow_dispatch:
 
 permissions:

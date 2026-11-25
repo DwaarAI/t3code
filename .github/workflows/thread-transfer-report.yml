@@ -1,9 +1,8 @@
 name: Thread Transfer Report
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  # Dwaar fork: manual runs only, to save GitHub Actions minutes.
+  workflow_dispatch:
 
 permissions:
   contents: read
