@@ -113,7 +113,11 @@ const recordTwentyEvents = Effect.gen(function* () {
   }
 });
 
-const analyticsLayerWith = (client: HttpClient.HttpClient, policy?: ManagedPolicyDocument) =>
+const analyticsLayerWith = (
+  client: HttpClient.HttpClient,
+  policy?: ManagedPolicyDocument,
+  env: Record<string, unknown> = { T3CODE_TELEMETRY_ENABLED: true },
+) =>
   AnalyticsService.layer.pipe(
     Layer.provideMerge(
       ServerConfig.ServerConfig.layerTest(process.cwd(), { prefix: "t3-telemetry-retry-" }),
@@ -121,7 +125,7 @@ const analyticsLayerWith = (client: HttpClient.HttpClient, policy?: ManagedPolic
     Layer.provide(
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          T3CODE_TELEMETRY_ENABLED: true,
+          ...env,
           T3CODE_POSTHOG_KEY: "phc_test_key",
           T3CODE_POSTHOG_HOST: "http://localhost",
         }),
@@ -151,6 +155,7 @@ const sendFor = (
     AnalyticsService.AnalyticsService | Effect.Services<typeof getTelemetryIdentity>
   > = recordTwentyEvents,
   policy?: ManagedPolicyDocument,
+  env?: Record<string, unknown>,
 ) =>
   Effect.gen(function* () {
     const batches: Array<ReadonlyArray<SentEvent>> = [];
@@ -165,7 +170,7 @@ const sendFor = (
         return yield* respond(request);
       }),
     );
-    const runtimeLayer = analyticsLayerWith(client, policy);
+    const runtimeLayer = analyticsLayerWith(client, policy, env);
 
     yield* Effect.gen(function* () {
       yield* record;
@@ -268,6 +273,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("AnalyticsService
         });
         assert.deepEqual(denied, []);
       }),
+  );
+
+  it.effect("sends nothing unless T3CODE_TELEMETRY_ENABLED opts in", () =>
+    Effect.gen(function* () {
+      const batches = yield* sendFor(1, respondWithStatus(204), recordTwentyEvents, undefined, {});
+      assert.deepEqual(batches, []);
+    }),
   );
 
   it.effect("drops a batch the endpoint rejects without sending it again", () =>

@@ -1,5 +1,8 @@
 # Product usage data
 
+This Dwaar build sends no product usage events or mobile crash reports unless you turn them on. Set
+`T3CODE_TELEMETRY_ENABLED=true` to send the events described below.
+
 The T3 Code server sends product usage events to T3 Code's own endpoint at `ingest.t3.codes`,
 associated with a hashed account or installation identifier. To count how many installations one person
 uses, the server also sends hashed account identifiers: your T3 Connect account, your OpenAI and
@@ -68,8 +71,8 @@ separate from product events. Depending on the client version, traces can includ
 timings, environment identifiers and the connected machine's name. Failed spans can include error
 messages and stack traces; error text can quote a value the app was handling.
 
-To disable product events and relay tracing from the server, set
-`T3CODE_TELEMETRY_ENABLED=false` in its environment before starting it. Relay tracing also stops
+Product events are off unless the server starts with `T3CODE_TELEMETRY_ENABLED=true`. Setting it to
+`false` also stops relay tracing. Relay tracing also stops
 when `T3CODE_OTEL_SDK_DISABLED` or `OTEL_SDK_DISABLED` turns OpenTelemetry export off.
 
 An administrator can turn product events and relay tracing off in the server and desktop app with
@@ -85,13 +88,13 @@ if the server has opted out. The browser app has no relay tracing toggle.
 
 ## Mobile app diagnostics
 
-When the iOS or Android app crashes or hits an error, it sends a report to T3 Code: the error
+When **Send crash reports** is on and the iOS or Android app crashes or hits an error, it sends a report to T3 Code: the error
 message, the stack trace, the app version, and the device model and OS version. Each launch also
 sends startup timings, and every report carries a random ID for the install. Reports go through
 the T3 Connect relay to Axiom. They do not include your threads, prompts, or connection details,
 but an error message can quote a value the app was handling.
 
-To stop sending them, turn off **Send crash reports** in **Settings > About T3 Code > Diagnostics**.
+Crash reports are off by default. To send them, turn on **Send crash reports** in **Settings > About T3 Code > Diagnostics**.
 
 The mobile app also sends relay connection traces when its build has tracing configured. These
 carry an identifier for the current app session. **Send crash reports** does not control these

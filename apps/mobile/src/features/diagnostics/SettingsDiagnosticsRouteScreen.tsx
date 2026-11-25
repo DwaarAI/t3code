@@ -162,7 +162,7 @@ function CrashReportsSetting() {
   const gt = useGT();
   const ready = AsyncResult.isSuccess(preferences) && !preferences.waiting;
   const enabled = AsyncResult.isSuccess(preferences)
-    ? preferences.value.crashReportsEnabled !== false
+    ? preferences.value.crashReportsEnabled === true
     : true;
 
   const change = (value: boolean) => {
